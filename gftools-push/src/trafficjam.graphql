@@ -1,0 +1,61 @@
+query TrafficJamQuery($after: String) {
+  organization(login: "google") {
+    projectV2(number: 74) {
+      id
+      title
+      updatedAt
+      items(first: 100, after: $after) {
+        totalCount
+        edges {
+          cursor
+        }
+        nodes {
+          id
+          status: fieldValueByName(name: "Status") {
+            ... on ProjectV2ItemFieldSingleSelectValue {
+              name
+              id
+            }
+          }
+          list: fieldValueByName(name: "List") {
+            ... on ProjectV2ItemFieldSingleSelectValue {
+              name
+              id
+            }
+          }
+          type
+          content {
+            ... on PullRequest {
+              id
+              number
+              files(first: 100) {
+                totalCount
+                nodes {
+                  path
+                }
+              }
+              url
+              labels(first: 10) {
+                nodes {
+                  name
+                }
+              }
+              closingIssuesReferences(first: 10) {
+                nodes {
+                  url
+                  projectItems(first: 10) {
+                    nodes {
+                      id
+                    }
+                  }
+                }
+              }
+              merged
+              closed
+            }
+          }
+        }
+      }
+    }
+  }
+}

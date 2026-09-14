@@ -1,0 +1,21 @@
+[package]
+name = "gftools"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+skrifa = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+toml = { workspace = true }
+serde_json_path_to_error = { workspace = true }
+write-fonts = { workspace = true, features = ["tables"] }
+linesweeper = { workspace = true }
+gf-metadata = { workspace = true }
+protobuf = { workspace = true }
+fontspector-hotfix = { workspace = true }
+kurbo = { workspace = true }
+tabled = { workspace = true }

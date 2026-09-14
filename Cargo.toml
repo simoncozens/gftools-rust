@@ -1,0 +1,67 @@
+[workspace]
+members = ["gftools-bin", "gftools-lib", "gftools-builder", "gftools-push"]
+resolver = "3"
+
+[workspace.dependencies]
+fontspector-hotfix = { git = "https://github.com/fonttools/fontspector", default-features = false, features = [
+    "profiles",
+] }
+anyhow = "1.0.104"
+ascii-dag = "0.4.0"
+async-recursion = "1"
+async-trait = "0.1.88"
+babelfont = { version = "0.2.1", git = "https://github.com/simoncozens/babelfont-rs" }
+clap = "4.5.45"
+clap-verbosity-flag = "3.0.4"
+dashmap = "6.1.0"
+dirs = "6.0.0"
+env_logger = "0.11.8"
+expanduser = "1.2.2"
+fontc = "1.0.0"
+fontdrasil = "0.4.0"
+fontmerge = { version = "0.1.0", git = "https://github.com/simoncozens/babelfont-rs" }
+futures = "0.3"
+gf-metadata = "0.2.0"
+google-fonts-axisregistry = "0.5.0"
+google-fonts-glyphsets = "1.1.1"
+google-fonts-subsets = "0.202602.1"
+indicatif = "0.18.4"
+itertools = "0.14.0"
+kurbo = "0.13"
+layout-rs = "0.1.3"
+linesweeper = "0.4.0"
+log = "0.4.27"
+monostate = "0.1.14"
+num_cpus = "1"
+petgraph = "0.8.2"
+pretty_assertions = "1.4.1"
+protobuf = "3.7.2"
+read-fonts = "0.42.1"
+reqwest = { version = "0.13.1", features = ["blocking", "json"] }
+serde = "1.0.219"
+serde-inline-default = "1.0.0"
+serde_json = "1.0.140"
+serde_json_path_to_error = "0.1.4"
+serde_yaml_ng = "0.10.0"
+serial_test = "3"
+skeravar = { git = "https://github.com/simoncozens/skeravar" }
+skrifa = "0.46.2"
+tempfile = "3"
+thiserror = "2.0.12"
+tilvisan = "0.1.1"
+tokio = "1"
+toml = "0.8.20"
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-chrome = "0.7.2"
+tracing-log = "0.2"
+tracing-subscriber = "0.3"
+ttf2woff2 = { version = "0.10.3", default-features = false }
+unicode_names2 = "2.0.0"
+write-fonts = "0.52.0"
+zip = "7.2.0"
+tabled = "0.22.0"
+gftools = { path = "gftools-lib" }
+norad = "0.18.4"
+chrono = "0.4.45"
+scraper = "0.23.1"

@@ -1,0 +1,67 @@
+[package]
+name = "gftools-builder"
+description = "A tool to build and fix fonts for Google Fonts"
+authors = ["Simon Cozens <simon@simon-cozens.org>"]
+repository = "https://github.com/simoncozens/gftools-builder3"
+version = "3.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = true
+
+[[bin]]
+name = "gftools-builder"
+path = "src/main.rs"
+
+[features]
+graphviz = ["layout-rs"]
+
+[dependencies]
+async-recursion = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true }
+dashmap = { workspace = true }
+env_logger = { workspace = true }
+fontc = { workspace = true }
+skeravar = { workspace = true }
+read-fonts = { workspace = true }
+futures = { workspace = true }
+google-fonts-axisregistry = { workspace = true, features = ["fontations"] }
+log = { workspace = true }
+monostate = { workspace = true }
+num_cpus = { workspace = true }
+petgraph = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+tracing-log = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["fmt", "json", "ansi", "env-filter"] }
+tracing-appender = { workspace = true }
+
+layout-rs = { workspace = true, optional = true }
+serde-inline-default = { workspace = true }
+fontdrasil = { workspace = true }
+ttf2woff2 = { workspace = true }
+ascii-dag = { workspace = true }
+tracing-chrome = { workspace = true }
+clap-verbosity-flag = { workspace = true }
+
+gftools = { workspace = true }
+babelfont = { workspace = true }
+fontmerge = { workspace = true }
+dirs = { workspace = true }                                                                    # For temporary storage of donor fonts when including subsets
+google-fonts-glyphsets = { workspace = true }
+reqwest = { workspace = true, features = ["blocking", "json"] }
+zip = { workspace = true }
+itertools = { workspace = true }
+indicatif = { workspace = true }
+tilvisan = { workspace = true }
+gf-metadata.workspace = true
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }
+serial_test = { workspace = true }

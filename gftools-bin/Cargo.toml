@@ -1,0 +1,110 @@
+[package]
+name = "gftools-bin"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "gftools-add-axis"
+path = "src/add_axis.rs"
+
+[[bin]]
+name = "gftools-fix-fstype"
+path = "src/fix_fstype.rs"
+
+[[bin]]
+name = "gftools-fix-font"
+path = "src/fix_font.rs"
+
+
+[[bin]]
+name = "gftools-fix-gasp"
+path = "src/fix_gasp.rs"
+
+[[bin]]
+name = "gftools-fix-hinting"
+path = "src/fix_hinting.rs"
+
+[[bin]]
+name = "gftools-fix-isfixedpitch"
+path = "src/fix_isfixedpitch.rs"
+
+[[bin]]
+name = "gftools-fix-nonhinting"
+path = "src/fix_nonhinting.rs"
+
+[[bin]]
+name = "gftools-fix-weightclass"
+path = "src/fix_weightclass.rs"
+
+[[bin]]
+name = "gftools-list-italicangle"
+path = "src/list_italicangle.rs"
+
+[[bin]]
+name = "gftools-list-panose"
+path = "src/list_panose.rs"
+
+[[bin]]
+name = "gftools-list-vendorid"
+path = "src/list_vendorid.rs"
+
+[[bin]]
+name = "gftools-list-weightclass"
+path = "src/list_weightclass.rs"
+
+[[bin]]
+name = "gftools-unicode-names"
+path = "src/unicode_names.rs"
+
+[[bin]]
+name = "gftools-rangify"
+path = "src/rangify.rs"
+
+[[bin]]
+name = "gftools-rename-glyphs"
+path = "src/rename_glyphs.rs"
+
+[[bin]]
+name = "gftools-remove-overlaps"
+path = "src/remove_overlaps.rs"
+
+[[bin]]
+name = "gftools-check-bbox"
+path = "src/check_bbox.rs"
+
+[[bin]]
+name = "gftools-ttf2cp"
+path = "src/ttf2cp.rs"
+
+[[bin]]
+name = "gftools-ufo-set-order"
+path = "src/ufo_set_order.rs"
+
+[[bin]]
+name = "gftools-update-version"
+path = "src/update_version.rs"
+
+[[bin]]
+name = "gftools-what-subsets"
+path = "src/what_subsets.rs"
+
+[[bin]]
+name = "gftools-drop-hints"
+path = "src/drop_hints.rs"
+
+[dependencies]
+skrifa = { workspace = true }
+log = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+write-fonts = { workspace = true, features = ["tables"] }
+fontspector-hotfix = { workspace = true }
+env_logger = { workspace = true }
+tabled = { workspace = true }
+unicode_names2 = { workspace = true }
+google-fonts-subsets = { workspace = true }
+gftools = { workspace = true }
+anyhow = { workspace = true }
+norad = { workspace = true }
+
+[dev-dependencies]
+env_logger = { workspace = true }

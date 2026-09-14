@@ -1,0 +1,43 @@
+[package]
+name = "gftools-push"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "gftools-compare-meta"
+path = "src/bin/compare_meta.rs"
+
+[[bin]]
+name = "gftools-gen-push-lists"
+path = "src/bin/gen_push_lists.rs"
+
+[[bin]]
+name = "gftools-manage-traffic-jam"
+path = "src/bin/manage_traffic_jam.rs"
+
+[[bin]]
+name = "gftools-push-stats"
+path = "src/bin/push_stats.rs"
+
+[[bin]]
+name = "gftools-push-status"
+path = "src/bin/push_status.rs"
+
+
+[dependencies]
+chrono = { workspace = true }
+gftools = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+scraper = { workspace = true }
+toml.workspace = true
+reqwest.workspace = true
+serde_json_path_to_error.workspace = true
+log.workspace = true
+skrifa.workspace = true
+gf-metadata.workspace = true
+
+[dev-dependencies]
+expanduser = { workspace = true }
+env_logger = { workspace = true }
+pretty_assertions = { workspace = true }
