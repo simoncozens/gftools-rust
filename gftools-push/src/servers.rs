@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -6,83 +6,160 @@ use std::{
     path::Path,
     sync::{LazyLock, Mutex},
 };
-use toml::Table;
 
-use gftools::GftoolsError;
+use gftools::{GftoolsError, strip_json_guard};
 
 use super::items::{Axis, Designer, Family, FamilyMeta, Item};
+use crate::config::PushConfig;
 
 /// Re-exported so the push crate has a single source of truth for this url.
-pub(crate) use gftools::PROD_FAMILY_DOWNLOAD;
+pub use gftools::PROD_FAMILY_DOWNLOAD;
 
-#[derive(Default, Serialize, Deserialize)]
-struct GfServer {
+/// A Google Fonts push target: its metadata api, its family download endpoint
+/// and its versions manifest.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GfServer {
+    #[serde(default)]
     name: String,
+    #[serde(default)]
     url: String,
+    #[serde(default)]
     dl_url: String,
+    #[serde(default)]
     version_url: String,
+    #[serde(default)]
     families: HashMap<String, Family>,
+    #[serde(default)]
     designers: HashMap<String, Designer>,
-    family_meta: HashMap<String, FamilyMeta>,
+    #[serde(default)]
+    metadata: HashMap<String, FamilyMeta>,
+    #[serde(default)]
     axisregistry: HashMap<String, Axis>,
+    /// Loaded by `refresh_versions`; deliberately not persisted, so a saved
+    /// cache can never hold a stale versions manifest.
     #[serde(skip, default)]
     _family_versions_data: serde_json::Map<String, Value>,
     #[serde(skip, default)]
     _family_versions: HashMap<String, String>,
 }
 
-static CACHE: LazyLock<Mutex<HashMap<(String, String), Value>>> =
+/// Shared client, so connection pools are reused across calls.
+static HTTP: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+
+/// Per-family metadata, fetched by both `update_family_designers` and
+/// `update_metadata` for the same family.
+static FAMILY_CACHE: LazyLock<Mutex<HashMap<(String, String), Value>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-fn cached_gf_server_family_metadata(name: &str, url: &str) -> Result<Value, GftoolsError> {
-    let mut cache = CACHE.lock().unwrap();
-    if let Some(cached_value) = cache.get(&(name.to_string(), url.to_string())) {
-        return Ok(cached_value.clone());
+async fn cached_gf_server_family_metadata(name: &str, url: &str) -> Result<Value, GftoolsError> {
+    let key = (name.to_string(), url.to_string());
+    {
+        let cache = FAMILY_CACHE.lock().unwrap();
+        if let Some(cached_value) = cache.get(&key) {
+            return Ok(cached_value.clone());
+        }
     }
-    let request =
-        reqwest::blocking::Client::new().get(format!("{}/{}", url, name.replace(" ", "%20")));
-    let response = request.send().and_then(|r| r.error_for_status())?;
-    let text = response.text()?.replace(")]}'", "");
-    let family_data: Value = serde_json::from_str(&text)
+    let text = HTTP
+        .get(format!("{}/{}", url, name.replace(" ", "%20")))
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    let family_data: Value = serde_json::from_str(strip_json_guard(&text))
         .map_err(|e| GftoolsError::Misc(format!("Failed to parse JSON response: {}", e)))?;
-    cache.insert((name.to_string(), url.to_string()), family_data.clone());
+    FAMILY_CACHE
+        .lock()
+        .unwrap()
+        .insert(key, family_data.clone());
     Ok(family_data)
 }
 
+/// Every family on a server, keyed by family name, as returned by the
+/// `familyMetadataList` endpoint. Cached, and unbounded like Python's
+/// `lru_cache`. Used by `push_status` to separate new families from existing
+/// ones.
+pub async fn gf_server_metadata(url: &str) -> Result<HashMap<String, Value>, GftoolsError> {
+    static CACHE: LazyLock<Mutex<HashMap<String, HashMap<String, Value>>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    {
+        let cache = CACHE.lock().unwrap();
+        if let Some(cached) = cache.get(url) {
+            return Ok(cached.clone());
+        }
+    }
+    let info: Value = HTTP
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let families: HashMap<String, Value> = info
+        .get("familyMetadataList")
+        .and_then(|x| x.as_array())
+        .ok_or_else(|| GftoolsError::Misc(format!("Failed to find familyMetadataList in {}", url)))?
+        .iter()
+        .filter_map(|entry| {
+            entry
+                .get("family")
+                .and_then(|f| f.as_str())
+                .map(|name| (name.to_string(), entry.clone()))
+        })
+        .collect();
+    CACHE
+        .lock()
+        .unwrap()
+        .insert(url.to_string(), families.clone());
+    Ok(families)
+}
+
 impl GfServer {
-    pub fn new(
-        name: String,
-        url: String,
-        dl_url: String,
-        version_url: String,
+    /// Build a server and load its versions manifest.
+    pub async fn new(
+        name: &str,
+        url: &str,
+        dl_url: &str,
+        version_url: &str,
     ) -> Result<Self, GftoolsError> {
         let mut server = GfServer {
-            name,
-            url,
-            dl_url,
-            version_url,
+            name: name.to_string(),
+            url: url.to_string(),
+            dl_url: dl_url.to_string(),
+            version_url: version_url.to_string(),
             ..Default::default()
         };
-        let request = reqwest::blocking::Client::new().get(&server.version_url);
-        let response = request.send().and_then(|r| r.error_for_status())?;
-        let text = response.text()?;
-        let json_text = text.chars().skip(5).collect::<String>();
-        let family_data: serde_json::Value = serde_json::from_str(&json_text)
-            .map_err(|e| GftoolsError::Misc(format!("Failed to parse JSON response: {}", e)))?;
-        server._family_versions_data = family_data
-            .as_object()
-            .ok_or(GftoolsError::Misc(format!(
-                "Failed to parse JSON response: {}",
-                text
-            )))?
-            .clone();
-        server._family_versions = server
+        server.refresh_versions().await?;
+        Ok(server)
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Re-read the `familyVersions` manifest. Called on construction, and again
+    /// by `update_all` so that a server restored from a saved cache does not
+    /// need the network just to be loaded.
+    pub async fn refresh_versions(&mut self) -> Result<(), GftoolsError> {
+        let text = HTTP
+            .get(&self.version_url)
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?;
+        let data: Value = serde_json::from_str(strip_json_guard(&text))
+            .map_err(|e| GftoolsError::Misc(format!("Failed to parse versions response: {}", e)))?;
+        self._family_versions_data = data.as_object().cloned().ok_or_else(|| {
+            GftoolsError::Misc(format!("Failed to parse versions response: {}", text))
+        })?;
+        self._family_versions = self
             ._family_versions_data
             .get("familyVersions")
             .and_then(|x| x.as_array())
             .ok_or(GftoolsError::Misc(format!(
                 "Failed to find familyVersions in manifest: {:?}",
-                server._family_versions_data
+                self._family_versions_data
             )))?
             .iter()
             .flat_map(|item| item.as_object())
@@ -102,19 +179,18 @@ impl GfServer {
                 }
             })
             .collect(); // This is four lines of code in Python
-
-        Ok(server)
+        Ok(())
     }
 
-    fn is_online(&self) -> bool {
-        let request = reqwest::blocking::Client::new().head(&self.url);
-        request
+    pub async fn is_online(&self) -> bool {
+        HTTP.head(&self.url)
             .send()
+            .await
             .and_then(|response| response.error_for_status())
             .is_ok()
     }
 
-    fn last_push(&self) -> Result<chrono::DateTime<Utc>, GftoolsError> {
+    pub fn last_push(&self) -> Result<DateTime<Utc>, GftoolsError> {
         let timestamp = self
             ._family_versions_data
             .get("lastUpdate")
@@ -131,11 +207,11 @@ impl GfServer {
         Ok(last_push)
     }
 
-    fn compare_push_item(&self, item: &Item) -> bool {
+    pub fn compare_push_item(&self, item: &Item) -> bool {
         self.find_item(item).as_ref() == Some(item)
     }
 
-    fn find_item(&self, item: &Item) -> Option<Item> {
+    pub fn find_item(&self, item: &Item) -> Option<Item> {
         // I don't like all the clone()s here, but I don't know how to do it better
         match item {
             Item::Family(family) => self
@@ -147,7 +223,7 @@ impl GfServer {
                 .get(&designer.name)
                 .map(|x| Item::Designer(x.clone())),
             Item::FamilyMeta(family_meta) => self
-                .family_meta
+                .metadata
                 .get(&family_meta.name)
                 .map(|x| Item::FamilyMeta(x.clone())),
             Item::Axis(axis) => self
@@ -170,7 +246,10 @@ impl GfServer {
         Ok(())
     }
 
-    fn update_family(&mut self, name: &str) -> Result<(), GftoolsError> {
+    /// Returns false when nothing could be recorded, which tells `update` to
+    /// skip this family's designers and metadata. Python behaves the same way:
+    /// `Family.from_gf` returns `None` rather than raising.
+    async fn update_family(&mut self, name: &str) -> Result<bool, GftoolsError> {
         if let Some(version) = self._family_versions.get(name) {
             self.families.insert(
                 name.to_string(),
@@ -179,15 +258,22 @@ impl GfServer {
                     version: version.clone(),
                 },
             );
-        } else {
-            let family = Family::from_googlefonts(name, &self.dl_url)?;
-            self.families.insert(name.to_string(), family);
+            return Ok(true);
         }
-        Ok(())
+        match Family::from_googlefonts(name, &self.dl_url).await {
+            Ok(family) => {
+                self.families.insert(name.to_string(), family);
+                Ok(true)
+            }
+            Err(e) => {
+                log::warn!("Could not fetch {} from {}: {}", name, self.dl_url, e);
+                Ok(false)
+            }
+        }
     }
 
-    fn update_family_designers(&mut self, name: &str) -> Result<(), GftoolsError> {
-        let meta: Value = cached_gf_server_family_metadata(name, &self.url)?;
+    async fn update_family_designers(&mut self, name: &str) -> Result<(), GftoolsError> {
+        let meta: Value = cached_gf_server_family_metadata(name, &self.url).await?;
         for designer_value in
             meta.get("designers")
                 .and_then(|x| x.as_array())
@@ -209,20 +295,35 @@ impl GfServer {
         Ok(())
     }
 
-    fn update_metadata(&mut self, name: &str) -> Result<(), GftoolsError> {
-        let meta: Value = cached_gf_server_family_metadata(name, &self.url)?;
-        let family_meta: FamilyMeta = serde_json_path_to_error::from_value(meta.clone())?;
-        self.family_meta.insert(name.to_string(), family_meta);
+    async fn update_metadata(&mut self, name: &str) -> Result<(), GftoolsError> {
+        let meta: Value = cached_gf_server_family_metadata(name, &self.url).await?;
+        let family_meta: FamilyMeta = serde_json_path_to_error::from_value(meta)?;
+        // Key by the name the server reports, as Python does.
+        self.metadata.insert(family_meta.name.clone(), family_meta);
         Ok(())
     }
 
-    fn update_all(&mut self, last_checked: &chrono::NaiveDate) -> Result<(), GftoolsError> {
-        let request = reqwest::blocking::Client::new().get(&self.url);
-        let response = request.send().and_then(|r| r.error_for_status())?;
-        let text = response.text()?;
-        let parsed_meta = serde_json_path_to_error::from_str::<Value>(&text)?;
+    async fn fetch_metadata_root(&self) -> Result<Value, GftoolsError> {
+        let text = HTTP
+            .get(&self.url)
+            .send()
+            .await?
+            .error_for_status()?
+            .text()
+            .await?;
+        serde_json::from_str(strip_json_guard(&text))
+            .map_err(|e| GftoolsError::Misc(format!("Failed to parse JSON response: {}", e)))
+    }
+
+    /// Refresh the axis registry, plus every family whose version changed or
+    /// that was modified on or after `last_checked`.
+    pub async fn update_all(&mut self, last_checked: &NaiveDate) -> Result<(), GftoolsError> {
+        // The versions manifest may be missing, e.g. after `open`, and the
+        // version comparison below depends on it.
+        self.refresh_versions().await?;
+        let parsed_meta = self.fetch_metadata_root().await?;
         let meta = parsed_meta.as_object().ok_or_else(|| {
-            GftoolsError::Misc(format!("Failed to parse JSON response: {}", text))
+            GftoolsError::Misc(format!("Failed to parse JSON response: {}", parsed_meta))
         })?;
         let axis_data = meta.get("axisRegistry").ok_or(GftoolsError::Misc(format!(
             "Failed to find axisRegistry in manifest: {:?}",
@@ -253,6 +354,10 @@ impl GfServer {
                         "Failed to parse family name: {:?}",
                         family_data
                     )))?;
+            // A leftover test family which Google Fonts keeps in the list.
+            if name == "Roboto_old" {
+                continue;
+            }
             let last_modified_str = family_data
                 .get("lastModified")
                 .and_then(|x| x.as_str())
@@ -260,134 +365,88 @@ impl GfServer {
                     "Failed to parse lastModified: {:?}",
                     family_data
                 )))?;
-            let last_modified = chrono::NaiveDate::parse_from_str(last_modified_str, "%Y-%m-%d")
+            let last_modified = NaiveDate::parse_from_str(last_modified_str, "%Y-%m-%d")
                 .map_err(|e| GftoolsError::Misc(format!("Failed to parse lastModified: {}", e)))?;
 
-            let cached_family_version = self._family_versions.get(name).map(|x| x.as_str());
-            let existing_family_version = self.families.get(name).map(|x| x.version.as_str());
-            if (cached_family_version != existing_family_version) || &last_modified > last_checked {
-                self.update(name)?;
+            let cached_family_version = self._family_versions.get(name);
+            let existing_family_version = self.families.get(name).map(|f| &f.version);
+            // When both versions are known, only a version change matters.
+            // Otherwise fall back to the modification date.
+            let should_update = match (cached_family_version, existing_family_version) {
+                (Some(cached), Some(existing)) => cached != existing,
+                _ => last_modified >= *last_checked,
+            };
+            if should_update {
+                self.update(name).await?;
             }
         }
-
         Ok(())
     }
 
-    fn update(&mut self, family_name: &str) -> Result<(), GftoolsError> {
+    pub async fn update(&mut self, family_name: &str) -> Result<(), GftoolsError> {
         log::info!("Updating family: {}", family_name);
-        self.update_family(family_name)?;
-        self.update_family_designers(family_name)?;
-        self.update_metadata(family_name)?;
+        if self.update_family(family_name).await? {
+            self.update_family_designers(family_name).await?;
+            self.update_metadata(family_name).await?;
+        }
         Ok(())
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct GfServers {
-    dev: GfServer,
-    sandbox: GfServer,
-    production: GfServer,
-    last_checked: NaiveDateTime,
+/// The servers the push workflow targets, plus when they were last checked.
+///
+/// `dev` is deliberately absent: only `manage_traffic_jam` needs it, so that
+/// script builds one from the config itself. (Python's `GFServers` has no `dev`
+/// either, even though `manage_traffic_jam` tries to read one.)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GfServers {
+    pub sandbox: GfServer,
+    pub production: GfServer,
+    pub last_checked: NaiveDate,
 }
 
 impl GfServers {
-    fn new(config_file: impl AsRef<Path>) -> Result<Self, GftoolsError> {
-        let config_file: &Path = config_file.as_ref();
-        let config = std::fs::read_to_string(config_file)?;
-        let config: Table = toml::de::from_str(&config)?;
-        let urls = config
-            .get("urls")
-            .and_then(|x| x.as_table())
-            .ok_or(GftoolsError::Misc(
-                "Failed to find urls in config file".to_string(),
-            ))?;
-        let dev = GfServer::new(
-            "dev".to_string(),
-            urls.get("dev_meta")
-                .and_then(|x| x.as_str())
-                .ok_or(GftoolsError::Misc(
-                    "Failed to find dev_meta in config file".to_string(),
-                ))?
-                .to_string(),
-            urls.get("dev_family_download")
-                .and_then(|x| x.as_str())
-                .ok_or(GftoolsError::Misc(
-                    "Failed to find dev_family_download in config file".to_string(),
-                ))?
-                .to_string(),
-            urls.get("dev_versions")
-                .and_then(|x| x.as_str())
-                .ok_or(GftoolsError::Misc(
-                    "Failed to find dev_versions in config file".to_string(),
-                ))?
-                .to_string(),
-        )?;
-        let sandbox = GfServer::new(
-            "sandbox".to_string(),
-            urls.get("sandbox_meta")
-                .and_then(|x| x.as_str())
-                .ok_or(GftoolsError::Misc(
-                    "Failed to find sandbox_meta in config file".to_string(),
-                ))?
-                .to_string(),
-            urls.get("sandbox_family_download")
-                .and_then(|x| x.as_str())
-                .ok_or(GftoolsError::Misc(
-                    "Failed to find sandbox_family_download in config file".to_string(),
-                ))?
-                .to_string(),
-            urls.get("sandbox_versions")
-                .and_then(|x| x.as_str())
-                .ok_or(GftoolsError::Misc(
-                    "Failed to find sandbox_versions in config file".to_string(),
-                ))?
-                .to_string(),
-        )?;
-        let production = GfServer::new(
-            "production".to_string(),
-            urls.get("production_meta")
-                .and_then(|x| x.as_str())
-                .ok_or(GftoolsError::Misc(
-                    "Failed to find production_meta in config file".to_string(),
-                ))?
-                .to_string(),
-            PROD_FAMILY_DOWNLOAD.to_string(),
-            urls.get("production_versions")
-                .and_then(|x| x.as_str())
-                .ok_or(GftoolsError::Misc(
-                    "Failed to find production_versions in config file".to_string(),
-                ))?
-                .to_string(),
-        )?;
+    /// Build from `config`. Contacts both servers' versions endpoints.
+    pub async fn new(config: &PushConfig) -> Result<Self, GftoolsError> {
         Ok(GfServers {
-            dev,
-            sandbox,
-            production,
-            last_checked: chrono::Utc::now().naive_utc(),
+            sandbox: GfServer::new(
+                "sandbox",
+                config.url("sandbox_meta")?,
+                config.url("sandbox_family_download")?,
+                config.url("sandbox_versions")?,
+            )
+            .await?,
+            production: GfServer::new(
+                "production",
+                config.url("production_meta")?,
+                PROD_FAMILY_DOWNLOAD,
+                config.url("production_versions")?,
+            )
+            .await?,
+            last_checked: Utc::now().date_naive(),
         })
     }
 
-    fn last_pushes(&self) -> Result<(), GftoolsError> {
+    pub fn last_pushes(&self) -> Result<(), GftoolsError> {
         log::info!(
-            "Last push: dev: {}, sandbox: {}, production: {}",
-            self.dev.last_push()?,
+            "Last pushes for each server:\nSandbox: {}\nProduction: {}",
             self.sandbox.last_push()?,
             self.production.last_push()?
         );
         Ok(())
     }
 
-    fn iter(&self) -> impl Iterator<Item = &GfServer> {
-        vec![&self.dev, &self.sandbox, &self.production].into_iter()
+    pub fn iter(&self) -> impl Iterator<Item = &GfServer> {
+        vec![&self.sandbox, &self.production].into_iter()
     }
 
-    fn iter_mut(&mut self) -> impl Iterator<Item = &mut GfServer> {
-        vec![&mut self.dev, &mut self.sandbox, &mut self.production].into_iter()
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut GfServer> {
+        vec![&mut self.sandbox, &mut self.production].into_iter()
     }
 
-    fn servers_online(&self) -> Result<(), GftoolsError> {
+    pub async fn servers_online(&self) -> Result<(), GftoolsError> {
         for server in self.iter() {
-            if !server.is_online() {
+            if !server.is_online().await {
                 return Err(GftoolsError::Misc(format!(
                     "Server {} is offline",
                     server.name
@@ -397,16 +456,68 @@ impl GfServers {
         Ok(())
     }
 
-    fn update_all(&mut self) -> Result<(), GftoolsError> {
+    pub async fn update_all(&mut self) -> Result<(), GftoolsError> {
         let last_checked = self.last_checked;
         for server in self.iter_mut() {
-            server.update_all(&last_checked.into())?;
+            server.update_all(&last_checked).await?;
         }
-        self.last_checked = Utc::now().naive_utc();
+        self.last_checked = Utc::now().date_naive();
         Ok(())
     }
 
-    fn save(&self, path: impl AsRef<Path>) -> Result<(), GftoolsError> {
+    /// Update a single family on every server, logging rather than propagating
+    /// per-server failures.
+    pub async fn update(&mut self, family_name: &str) {
+        for server in self.iter_mut() {
+            if let Err(e) = server.update(family_name).await {
+                log::error!("Error updating {} on {}: {}", family_name, server.name, e);
+            }
+        }
+    }
+
+    /// `item`'s JSON, plus whether each server already has it.
+    pub fn compare_item(&self, item: &Item) -> serde_json::Map<String, Value> {
+        let mut res = match item.to_json() {
+            Value::Object(map) => map,
+            _ => serde_json::Map::new(),
+        };
+        for server in self.iter() {
+            res.insert(
+                format!("In {}", server.name),
+                Value::Bool(server.compare_push_item(item)),
+            );
+        }
+        res
+    }
+
+    /// Read a saved cache. Never touches the network: the versions manifests are
+    /// refreshed by `update_all`.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, GftoolsError> {
+        let contents = std::fs::read_to_string(path)?;
+        Self::from_json(&contents)
+    }
+
+    pub fn from_json(json: &str) -> Result<Self, GftoolsError> {
+        let mut servers: Self = serde_json_path_to_error::from_str(json)?;
+        servers.stamp_server_names();
+        Ok(servers)
+    }
+
+    pub fn from_dict(value: Value) -> Result<Self, GftoolsError> {
+        let mut servers: Self = serde_json_path_to_error::from_value(value)?;
+        servers.stamp_server_names();
+        Ok(servers)
+    }
+
+    /// Server names belong to the struct rather than to the file, so a partial
+    /// or hand-written document still yields usable servers. Python gets the
+    /// same effect by overlaying the file onto an already-constructed object.
+    fn stamp_server_names(&mut self) {
+        self.sandbox.name = "sandbox".to_string();
+        self.production.name = "production".to_string();
+    }
+
+    pub fn save(&self, path: impl AsRef<Path>) -> Result<(), GftoolsError> {
         let path = path.as_ref();
         let json = serde_json_path_to_error::to_string_pretty(&self)?;
         std::fs::write(path, json)?;
@@ -417,17 +528,72 @@ impl GfServers {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use expanduser::expanduser;
+    use pretty_assertions::assert_eq;
 
-    /// Manual smoke test: needs `~/.gf_push_config.ini` (or the env vars) and
-    /// network access, and writes `test.json` to the cwd.
+    /// Equivalent to the `DATA` fixture in `python/tests/push/test_servers.py`:
+    /// a partial document, which is all `from_json` needs. No network access.
+    const DATA: &str = r#"{
+        "sandbox": {"families": {"Abel": {"name": "Abel", "version": "0.999"}}},
+        "production": {"families": {"Abel": {"name": "Abel", "version": "0.999"}}},
+        "last_checked": "2023-01-01"
+    }"#;
+
+    fn servers() -> GfServers {
+        GfServers::from_json(DATA).unwrap()
+    }
+
+    fn abel(version: &str) -> Item {
+        Item::Family(Family {
+            name: "Abel".to_string(),
+            version: version.to_string(),
+        })
+    }
+
     #[test]
+    fn test_iter() {
+        assert_eq!(
+            servers().iter().map(|s| s.name()).collect::<Vec<_>>(),
+            vec!["sandbox", "production"]
+        );
+    }
+
+    #[test]
+    fn test_compare_item() {
+        let comparison = servers().compare_item(&abel("1.000"));
+        assert_eq!(comparison["name"], Value::String("Abel".to_string()));
+        assert_eq!(comparison["version"], Value::String("1.000".to_string()));
+        assert_eq!(comparison["In sandbox"], Value::Bool(false));
+        assert_eq!(comparison["In production"], Value::Bool(false));
+    }
+
+    #[test]
+    fn test_compare_item_match() {
+        let comparison = servers().compare_item(&abel("0.999"));
+        assert_eq!(comparison["In sandbox"], Value::Bool(true));
+        assert_eq!(comparison["In production"], Value::Bool(true));
+    }
+
+    #[test]
+    fn test_save_and_open_round_trip() {
+        let servers = servers();
+        let json = serde_json_path_to_error::to_string_pretty(&servers).unwrap();
+        let reopened = GfServers::from_json(&json).unwrap();
+        assert_eq!(
+            reopened.compare_item(&abel("0.999")),
+            servers.compare_item(&abel("0.999"))
+        );
+    }
+
+    /// Manual smoke test: needs `~/.gf_push_config.toml` (or `$GF_PUSH_CONFIG`)
+    /// and network access, and writes `test.json` into the cwd.
+    #[tokio::test(flavor = "multi_thread")]
     #[ignore = "requires a local push config and network access"]
-    fn test_name() {
+    async fn test_live_servers() {
         env_logger::init();
 
-        let mut servers = GfServers::new(expanduser("~/.gf_push_config.ini").unwrap()).unwrap();
-        servers.update_all().unwrap();
+        let config = PushConfig::load_default().unwrap();
+        let mut servers = GfServers::new(&config).await.unwrap();
+        servers.update_all().await.unwrap();
         servers.save("test.json").unwrap();
     }
 }

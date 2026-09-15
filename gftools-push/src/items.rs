@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use scraper::Html;
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 use serde_json::Value;
-use skrifa::{raw::TableProvider, string::StringId, FontRef, MetadataProvider};
+use skrifa::{FontRef, MetadataProvider, string::StringId};
 
 use gf_metadata::{AxisProto, DesignerInfoProto, FamilyProto};
-use gftools::{download_family_from_google_fonts, font_version, parse_pb, GftoolsError};
+use gftools::{GftoolsError, download_family_from_google_fonts, font_version, parse_pb};
 
 use crate::utils::google_path_to_repo_path;
 
@@ -82,23 +82,21 @@ impl Family {
         let font = skrifa::FontRef::new(&contents)?;
         Ok(Self::from_fontref(font))
     }
-    pub(crate) fn from_googlefonts_json(data: Value, url: &str) -> Result<Self, GftoolsError> {
+    pub(crate) async fn from_googlefonts_json(
+        data: Value,
+        url: &str,
+    ) -> Result<Self, GftoolsError> {
         let name = data
             .as_object()
             .and_then(|m| m.get("family"))
             .and_then(|f| f.as_str())
-            .ok_or_else(|| {
-                GftoolsError::Misc(format!(
-                    "Couldn't find family in JSON: {}",
-                    data.to_string()
-                ))
-            })?;
-        Self::from_googlefonts(name, url)
+            .ok_or_else(|| GftoolsError::Misc(format!("Couldn't find family in JSON: {}", data)))?;
+        Self::from_googlefonts(name, url).await
     }
     /// Download a family from a Google Fonts server and read the name and
     /// version from its first font, mirroring `Family.from_gf`.
-    pub(crate) fn from_googlefonts(name: &str, dl_url: &str) -> Result<Self, GftoolsError> {
-        let fonts = download_family_from_google_fonts(name, Some(dl_url), true)?;
+    pub(crate) async fn from_googlefonts(name: &str, dl_url: &str) -> Result<Self, GftoolsError> {
+        let fonts = download_family_from_google_fonts(name, Some(dl_url), true).await?;
         let bytes = fonts.values().next().ok_or_else(|| {
             GftoolsError::Misc(format!("No font files found for family '{}'", name))
         })?;
@@ -320,7 +318,7 @@ where
 }
 
 impl FamilyMeta {
-    fn from_path(path: &Path) -> Result<Self, GftoolsError> {
+    pub(crate) fn from_path(path: &Path) -> Result<Self, GftoolsError> {
         let data = parse_pb::<FamilyProto>(&path.join("METADATA.pb"))?;
         let stroke = data
             .stroke
@@ -424,12 +422,28 @@ impl Designer {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-pub(crate) enum Item {
+pub enum Item {
     Family(Family),
     AxisFallback(AxisFallback),
     Axis(Axis),
     FamilyMeta(FamilyMeta),
     Designer(Designer),
+}
+
+impl Item {
+    /// The item as JSON, in the server's shape. `Family` is the exception: it is
+    /// a composite of the versions manifest and the font itself, so it keeps its
+    /// own `{name, version}` shape.
+    pub fn to_json(&self) -> Value {
+        match self {
+            Item::Family(v) => serde_json::to_value(v),
+            Item::AxisFallback(v) => serde_json::to_value(v),
+            Item::Axis(v) => serde_json::to_value(v),
+            Item::FamilyMeta(v) => serde_json::to_value(v),
+            Item::Designer(v) => serde_json::to_value(v),
+        }
+        .unwrap_or(Value::Null)
+    }
 }
 
 fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
@@ -446,7 +460,7 @@ mod tests {
     use crate::servers::PROD_FAMILY_DOWNLOAD;
 
     use super::*;
-    use pretty_assertions::{assert_eq, assert_ne};
+    use pretty_assertions::assert_eq;
 
     const CRATE_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -486,8 +500,8 @@ mod tests {
         assert_eq!(from_json, expected);
     }
 
-    #[test]
-    fn test_family() {
+    #[tokio::test]
+    async fn test_family() {
         let family_path: PathBuf = PathBuf::from(CRATE_ROOT)
             .join("data")
             .join("test")
@@ -500,6 +514,7 @@ mod tests {
             serde_json::from_str(FAMILY_JSON).unwrap(),
             PROD_FAMILY_DOWNLOAD,
         )
+        .await
         .unwrap();
         let expected = Family {
             name: "Maven Pro".to_string(),
