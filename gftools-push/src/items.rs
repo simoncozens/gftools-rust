@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use scraper::Html;
@@ -5,19 +6,28 @@ use serde::{de, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use skrifa::{raw::TableProvider, string::StringId, FontRef, MetadataProvider};
 
-use gf_metadata::{DesignerInfoProto, FamilyProto};
-use gftools::{parse_metadatapb, GftoolsError};
+use gf_metadata::{AxisProto, DesignerInfoProto, FamilyProto};
+use gftools::{download_family_from_google_fonts, font_version, parse_pb, GftoolsError};
 
-fn parse_html_file(p: &PathBuf) -> Result<String, GftoolsError> {
-    parse_html(
-        &std::fs::read_to_string(p)
-            .map_err(|_| GftoolsError::Misc(format!("Failed to read HTML file: {:?}", p)))?,
-    )
+use crate::utils::google_path_to_repo_path;
+
+/// Read an HTML file and reduce it to plain text. `None` when there is nothing
+/// to read.
+fn parse_html_file(p: &Path) -> Result<Option<String>, GftoolsError> {
+    let contents = std::fs::read_to_string(p)
+        .map_err(|_| GftoolsError::Misc(format!("Failed to read HTML file: {:?}", p)))?;
+    Ok(parse_html(&contents))
 }
 
-fn parse_html(s: &str) -> Result<String, GftoolsError> {
-    let document = Html::parse_fragment(&s);
-    Ok(document
+/// Strip tags and collapse whitespace, mirroring `gftools.push.items.parse_html`.
+/// Empty or blank input yields `None`, so "there is no description/article" is
+/// represented by absence rather than an empty string.
+fn parse_html(s: &str) -> Option<String> {
+    if s.trim().is_empty() {
+        return None;
+    }
+    let document = Html::parse_fragment(s);
+    let text = document
         .tree
         .nodes()
         .filter_map(|node| match node.value() {
@@ -28,28 +38,14 @@ fn parse_html(s: &str) -> Result<String, GftoolsError> {
         .collect::<Vec<_>>()
         .join(" ")
         .trim()
-        .replace("\n", " ")
-        .to_string())
+        .replace("\n", " ");
+    (!text.is_empty()).then_some(text)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Family {
     pub name: String,
     pub version: String,
-}
-
-fn font_version(f: &FontRef) -> String {
-    if let Some(version) = f
-        .localized_strings(StringId::VERSION_STRING)
-        .english_or_first()
-        .map(|name| name.chars().collect())
-    {
-        version
-    } else {
-        f.head()
-            .map(|head| head.font_revision().to_string())
-            .unwrap_or_else(|_| "0.0.0".to_string())
-    }
 }
 
 impl Family {
@@ -65,8 +61,24 @@ impl Family {
             version,
         }
     }
-    pub(crate) fn from_filepath(f: &PathBuf) -> Result<Self, GftoolsError> {
-        let contents = std::fs::read(f)?;
+    /// Create a new family from a directory containing font files.
+    pub(crate) fn from_path(f: &PathBuf) -> Result<Self, GftoolsError> {
+        // Read the first font file in the directory
+        let font_file = std::fs::read_dir(f)?
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.is_file() && path.extension().map(|ext| ext == "ttf").unwrap_or(false) {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+            .next()
+            .ok_or_else(|| {
+                GftoolsError::Misc(format!("No font file found in directory: {:?}", f))
+            })?;
+        let contents = std::fs::read(font_file)?;
         let font = skrifa::FontRef::new(&contents)?;
         Ok(Self::from_fontref(font))
     }
@@ -83,8 +95,15 @@ impl Family {
             })?;
         Self::from_googlefonts(name, url)
     }
-    pub(crate) fn from_googlefonts(_name: &str, _url: &str) -> Result<Self, GftoolsError> {
-        unimplemented!()
+    /// Download a family from a Google Fonts server and read the name and
+    /// version from its first font, mirroring `Family.from_gf`.
+    pub(crate) fn from_googlefonts(name: &str, dl_url: &str) -> Result<Self, GftoolsError> {
+        let fonts = download_family_from_google_fonts(name, Some(dl_url), true)?;
+        let bytes = fonts.values().next().ok_or_else(|| {
+            GftoolsError::Misc(format!("No font files found for family '{}'", name))
+        })?;
+        let font = skrifa::FontRef::new(bytes)?;
+        Ok(Self::from_fontref(font))
     }
 }
 
@@ -107,6 +126,7 @@ pub struct Axis {
     pub max_value: f32,
     pub precision: f32,
     #[serde(default)]
+    #[serde(rename = "fallbacks")]
     pub fallback: Vec<AxisFallback>,
     #[serde(default)]
     pub fallback_only: bool,
@@ -114,59 +134,210 @@ pub struct Axis {
 }
 
 impl Axis {
-    fn from_path(_path: &Path) -> Result<Self, GftoolsError> {
-        unimplemented!()
+    /// Creates an `Axis` instance from the given file path.
+    ///
+    /// The path should be the actual protobuf file.
+    pub(crate) fn from_path(path: &Path) -> Result<Self, GftoolsError> {
+        let path = google_path_to_repo_path(path);
+        let proto: AxisProto = parse_pb::<AxisProto>(&path)?;
+        Ok(Axis {
+            tag: proto.tag().to_string(),
+            display_name: proto.display_name().to_string(),
+            min_value: proto.min_value(),
+            default_value: proto.default_value(),
+            max_value: proto.max_value(),
+            // "Why the f32/i32 difference?" The protobuf definition file says:
+            // Input values for this axis must aligned to 10^precision
+            //   optional int32 precision = 5;
+            precision: proto.precision() as f32,
+            fallback: proto
+                .fallback
+                .iter()
+                .map(|f| AxisFallback {
+                    name: f.name().to_string(),
+                    value: f.value(),
+                })
+                .collect(),
+            fallback_only: proto.fallback_only(),
+            description: proto.description().to_string(),
+        })
     }
+
+    // No from_googlefonts_json, just deserialize it.
 }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// The canonical item shape is the *server's* shape, so these field names and
+/// the `coverage` map match what `fonts.google.com/metadata/fonts/<family>`
+/// returns. Values are normalised on the way in (see the deserialisers below)
+/// so that an item read from a family directory compares equal to the same
+/// family read from a server.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FamilyMeta {
     #[serde(rename = "family")]
     pub name: String,
 
-    // Not used in gftools-python?
-    // #[serde(default, rename = "displayName")]
-    // pub display_name: Option<String>,
     pub designers: Vec<Designer>,
+    #[serde(deserialize_with = "deserialize_lowercase")]
     pub license: String,
+    #[serde(deserialize_with = "deserialize_upper_snake")]
     pub category: String,
-    #[serde(rename = "coverage", deserialize_with = "get_keys")]
-    pub subsets: Vec<String>,
-    #[serde(deserialize_with = "deserialize_null_default", default)]
+    /// The server sends a map of subset name to unicode ranges. We only ever
+    /// compare the subset names, so the ranges are discarded and replaced with
+    /// empty strings; that keeps the server's shape while letting `from_path`
+    /// (which has no ranges to offer) produce an equal value.
+    #[serde(deserialize_with = "coverage_keys")]
+    pub coverage: BTreeMap<String, String>,
+    #[serde(default, deserialize_with = "deserialize_stroke")]
     pub stroke: String,
+    #[serde(default, deserialize_with = "deserialize_lowercase_vec")]
     pub classifications: Vec<String>,
-    pub description: String,
+    /// Kept separate from `article` so the existence and content of each can be
+    /// compared independently.
+    #[serde(default, deserialize_with = "deserialize_description")]
+    pub description: Option<String>,
+    #[serde(
+        default,
+        rename = "primaryScript",
+        deserialize_with = "deserialize_opt_empty"
+    )]
     pub primary_script: Option<String>,
+    /// The server sends an *array* of HTML documents; the repo has a single
+    /// `article/ARTICLE.en_us.html`. Both become parsed text, or `None`.
+    #[serde(default, deserialize_with = "deserialize_article")]
     pub article: Option<String>,
+    #[serde(
+        default,
+        rename = "minisiteUrl",
+        deserialize_with = "deserialize_opt_empty"
+    )]
     pub minisite_url: Option<String>,
 }
 
-fn get_keys<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+/// Designer bios (and image urls) cannot be reproduced from a family directory,
+/// and Python deliberately compared designer *names* only. Every other field is
+/// normalised on the way in, so it can be compared as-is.
+impl PartialEq for FamilyMeta {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.license == other.license
+            && self.category == other.category
+            && self.coverage == other.coverage
+            && self.stroke == other.stroke
+            && self.classifications == other.classifications
+            && self.description == other.description
+            && self.primary_script == other.primary_script
+            && self.article == other.article
+            && self.minisite_url == other.minisite_url
+            && self.designers.len() == other.designers.len()
+            && self
+                .designers
+                .iter()
+                .zip(other.designers.iter())
+                .all(|(a, b)| a.name == b.name)
+    }
+}
+
+// Value normalisation lives in these deserialisers rather than in
+// `from_googlefonts_json`, because `GFServer::update_metadata` deserialises the
+// raw server payload directly. Each is idempotent, so a value read back from
+// the saved cache normalises to itself.
+
+/// `{"latin": "0,13,32-126", ...}` -> `{"latin": "", ...}`
+fn coverage_keys<'de, D>(deserializer: D) -> Result<BTreeMap<String, String>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s: serde_json::Map<String, Value> = de::Deserialize::deserialize(deserializer)?;
-    Ok(s.keys().cloned().collect())
+    let map: BTreeMap<String, Value> = de::Deserialize::deserialize(deserializer)?;
+    Ok(map.into_keys().map(|k| (k, String::new())).collect())
+}
+
+/// Proto values are already `SANS_SERIF`; the server sends `Sans Serif`.
+fn deserialize_upper_snake<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(String::deserialize(deserializer)?
+        .replace(' ', "_")
+        .to_uppercase())
+}
+
+fn deserialize_lowercase<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(String::deserialize(deserializer)?.to_lowercase())
+}
+
+fn deserialize_lowercase_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Vec::<String>::deserialize(deserializer)?
+        .into_iter()
+        .map(|s| s.to_lowercase())
+        .collect())
+}
+
+/// `stroke` is optional; the repo falls back to the category when it is absent.
+fn deserialize_stroke<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let stroke = Option::<String>::deserialize(deserializer)?;
+    Ok(stroke.unwrap_or_default().replace(' ', "_").to_uppercase())
+}
+
+/// The server sends `""` rather than `null` for absent optional strings.
+fn deserialize_opt_empty<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<String>::deserialize(deserializer)?.filter(|s| !s.is_empty()))
+}
+
+fn deserialize_description<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let description = Option::<String>::deserialize(deserializer)?;
+    Ok(description.as_deref().and_then(parse_html))
+}
+
+/// The server sends `article` as an array of HTML documents, or `null`.
+fn deserialize_article<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let text = match Value::deserialize(deserializer)? {
+        Value::Null => return Ok(None),
+        Value::String(s) => s,
+        Value::Array(items) => items
+            .into_iter()
+            .find_map(|item| item.as_str().map(str::to_string))
+            .unwrap_or_default(),
+        _ => return Ok(None),
+    };
+    Ok(parse_html(&text))
 }
 
 impl FamilyMeta {
     fn from_path(path: &Path) -> Result<Self, GftoolsError> {
-        let data = parse_metadatapb::<FamilyProto>(path)?;
+        let data = parse_pb::<FamilyProto>(&path.join("METADATA.pb"))?;
         let stroke = data
             .stroke
             .as_ref()
-            .map(|x| x.replace("_,", " ").to_uppercase())
+            .map(|x| x.replace(' ', "_").to_uppercase())
             .or_else(|| data.category.first().cloned())
             .unwrap_or_else(|| "UNKNOWN".to_string());
 
         let article = path.join("article").join("ARTICLE.en_us.html");
         let article = if article.exists() {
-            Some(parse_html_file(&article)?)
+            parse_html_file(&article)?
         } else {
             None
         };
         let description = path.join("DESCRIPTION.en_us.html");
         let description = if description.exists() {
-            Some(parse_html_file(&description)?)
+            parse_html_file(&description)?
         } else {
             None
         };
@@ -178,42 +349,38 @@ impl FamilyMeta {
                 .map(|x| {
                     x.split(", ")
                         .map(|s| Designer {
-                            name: s.to_string(),
-                            bio: "".to_string(),
+                            name: s.trim().to_string(),
+                            bio: String::new(),
                         })
                         .collect()
                 })
                 .unwrap_or_default(),
-            license: data.license().to_string().to_lowercase(),
-            // display_name: data.display_name.map(|x| x.to_string()),
+            license: data.license().to_lowercase(),
             category: data.category.first().cloned().unwrap_or_default(),
-            subsets: data
+            // `menu` is not a real subset; the server's coverage map excludes
+            // it too.
+            coverage: data
                 .subsets
                 .iter()
-                .filter(|&x| x != &"menu".to_string())
-                .cloned()
+                .filter(|s| *s != "menu")
+                .map(|s| (s.clone(), String::new()))
                 .collect(),
             stroke,
-            classifications: data.classifications,
-            description: description.unwrap_or_default(),
-            primary_script: data.primary_script,
+            classifications: data
+                .classifications
+                .iter()
+                .map(|c| c.to_lowercase())
+                .collect(),
+            description,
+            primary_script: data.primary_script.clone().filter(|s| !s.is_empty()),
             article,
-            minisite_url: data.minisite_url,
+            minisite_url: data.minisite_url.clone().filter(|s| !s.is_empty()),
         })
     }
 
-    fn from_googlefonts_json(s: &str) -> Result<Self, GftoolsError> {
-        let mut initial: Self = serde_json::from_str(s)
-            .map_err(|e| GftoolsError::Misc(format!("Failed to parse JSON: {}", e)))?;
-        initial.stroke = initial.stroke.replace(" ", "_").to_uppercase();
-        initial.category = initial.category.replace(" ", "_").to_uppercase();
-        initial.description = parse_html(&initial.description)?;
-        initial.article = initial
-            .article
-            .as_ref()
-            .map(|text| parse_html(text))
-            .transpose()?;
-        Ok(initial)
+    pub(crate) fn from_googlefonts_json(s: &str) -> Result<Self, GftoolsError> {
+        serde_json::from_str(s)
+            .map_err(|e| GftoolsError::Misc(format!("Failed to parse JSON: {}", e)))
     }
 }
 
@@ -226,9 +393,13 @@ pub struct Designer {
 
 impl Designer {
     pub(crate) fn from_path(path: &Path) -> Result<Self, GftoolsError> {
-        let data = parse_metadatapb::<DesignerInfoProto>(path)?;
+        let data = parse_pb::<DesignerInfoProto>(&path.join("info.pb"))?;
         let bio = path.join("bio.html");
-        let bio = bio.exists().then(|| parse_html_file(&bio)).transpose()?;
+        let bio = if bio.exists() {
+            parse_html_file(&bio)?
+        } else {
+            None
+        };
         Ok(Self {
             name: data.designer().to_string(),
             bio: bio.unwrap_or_default(),
@@ -236,26 +407,24 @@ impl Designer {
     }
     pub(crate) fn from_googlefonts_json(data: Value, _url: &str) -> Result<Self, GftoolsError> {
         Ok(Self {
-            name: data["designer"]
+            name: data["name"]
                 .as_str()
                 .ok_or(GftoolsError::Misc(format!(
                     "Couldn't find designer in JSON: {}",
                     data
                 )))?
+                .trim()
                 .to_string(),
             bio: data["bio"]
                 .as_str()
-                .ok_or(GftoolsError::Misc(format!(
-                    "Couldn't find bio in JSON: {}",
-                    data
-                )))?
-                .to_string(),
+                .and_then(parse_html)
+                .unwrap_or_default(),
         })
     }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-pub(crate) enum PushItem {
+pub(crate) enum Item {
     Family(Family),
     AxisFallback(AxisFallback),
     Axis(Axis),
@@ -282,7 +451,7 @@ mod tests {
     const CRATE_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
     const FAMILY_JSON: &str = include_str!("../data/test/servers/family.json");
-    const fonts_json: &str = include_str!("../data/test/servers/fonts.json");
+    const FONTS_JSON: &str = include_str!("../data/test/servers/fonts.json");
 
     #[test]
     fn test_family_meta() {
@@ -301,10 +470,14 @@ mod tests {
             designers: vec![Designer { name: "Joe Prince".to_string(), bio: "".to_string() }],
             license: "ofl".to_string(),
             category: "SANS_SERIF".to_string(),
-            subsets: vec!["latin".to_string(), "latin-ext".to_string(), "vietnamese".to_string()],
+            coverage: BTreeMap::from([
+                ("latin".to_string(), String::new()),
+                ("latin-ext".to_string(), String::new()),
+                ("vietnamese".to_string(), String::new()),
+            ]),
             stroke: "SANS_SERIF".to_string(),
             classifications: vec![],
-            description: "Maven Pro is a sans-serif typeface with unique curvature and flowing rhythm. Its forms make it very distinguishable and legible when in context. It blends styles of many great typefaces and is suitable for any design medium. Maven Pro’s modern design is great for the web and fits in any environment. Updated in January 2019 with a Variable Font \"Weight\" axis. The Maven Pro project was initiated by Joe Price, a type designer based in the USA. To contribute, see github.com/googlefonts/mavenproFont".to_string(),
+            description: Some("Maven Pro is a sans-serif typeface with unique curvature and flowing rhythm. Its forms make it very distinguishable and legible when in context. It blends styles of many great typefaces and is suitable for any design medium. Maven Pro’s modern design is great for the web and fits in any environment. Updated in January 2019 with a Variable Font \"Weight\" axis. The Maven Pro project was initiated by Joe Price, a type designer based in the USA. To contribute, see github.com/googlefonts/mavenproFont".to_string()),
             primary_script: None,
             article: None,
             minisite_url: None,
@@ -313,6 +486,7 @@ mod tests {
         assert_eq!(from_json, expected);
     }
 
+    #[test]
     fn test_family() {
         let family_path: PathBuf = PathBuf::from(CRATE_ROOT)
             .join("data")
@@ -322,8 +496,11 @@ mod tests {
             .join("mavenpro");
         println!("Family path: {:?}", family_path);
         let from_fp = Family::from_path(&family_path).unwrap();
-        let from_json: Family =
-            Family::from_googlefonts_json(FAMILY_JSON, PROD_FAMILY_DOWNLOAD).unwrap();
+        let from_json: Family = Family::from_googlefonts_json(
+            serde_json::from_str(FAMILY_JSON).unwrap(),
+            PROD_FAMILY_DOWNLOAD,
+        )
+        .unwrap();
         let expected = Family {
             name: "Maven Pro".to_string(),
             version: "Version 2.103".to_string(),
@@ -331,7 +508,99 @@ mod tests {
         assert_eq!(from_fp, expected);
         assert_eq!(from_json, expected);
     }
+
+    #[test]
+    fn test_designer() {
+        let designer_path: PathBuf = PathBuf::from(CRATE_ROOT)
+            .join("data")
+            .join("test")
+            .join("gf_fonts")
+            .join("joeprince");
+        let from_fp = Designer::from_path(&designer_path).unwrap();
+        let designer_json =
+            serde_json::from_str::<Value>(FAMILY_JSON).unwrap()["designers"][0].clone();
+        println!("Designer JSON: {:?}", designer_json);
+        let from_json: Designer =
+            Designer::from_googlefonts_json(designer_json, PROD_FAMILY_DOWNLOAD).unwrap();
+        let expected = Designer {
+            name: "Joe Prince".to_string(),
+            bio: "".to_string(),
+        };
+        assert_eq!(from_fp, expected);
+        assert_eq!(from_json, expected);
+    }
+
+    #[test]
+    fn test_axis() {
+        let axis_path: PathBuf = PathBuf::from(CRATE_ROOT)
+            .join("data")
+            .join("test")
+            .join("axisregistry")
+            .join("data")
+            .join("weight.textproto");
+        println!("Axis path: {:?}", axis_path);
+        let from_fp = Axis::from_path(&axis_path).unwrap();
+        let binding = serde_json::from_str::<Value>(FONTS_JSON).unwrap();
+        let axis_from_json: &Value = binding["axisRegistry"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["tag"] == "wght")
+            .unwrap();
+        let from_json: Axis = serde_json::from_value(axis_from_json.clone()).unwrap();
+        let expected = Axis {
+            tag: "wght".to_string(),
+            display_name: "Weight".to_string(),
+            min_value: 1.0,
+            default_value: 400.0,
+            max_value: 1000.0,
+            precision: 0.0,
+            fallback: vec![
+                AxisFallback {
+                    name: "Thin".to_string(),
+                    value: 100.0,
+                },
+                AxisFallback {
+                    name: "ExtraLight".to_string(),
+                    value: 200.0,
+                },
+                AxisFallback {
+                    name: "Light".to_string(),
+                    value: 300.0,
+                },
+                AxisFallback {
+                    name: "Regular".to_string(),
+                    value: 400.0,
+                },
+                AxisFallback {
+                    name: "Medium".to_string(),
+                    value: 500.0,
+                },
+                AxisFallback {
+                    name: "SemiBold".to_string(),
+                    value: 600.0,
+                },
+                AxisFallback {
+                    name: "Bold".to_string(),
+                    value: 700.0,
+                },
+                AxisFallback {
+                    name: "ExtraBold".to_string(),
+                    value: 800.0,
+                },
+                AxisFallback {
+                    name: "Black".to_string(),
+                    value: 900.0,
+                },
+            ],
+            fallback_only: false,
+            description: "Adjust the style from lighter to bolder in typographic color, by varying stroke weights, spacing and kerning, and other aspects of the type. This typically changes overall width, and so may be used in conjunction with Width and Grade axes.".to_string(),
+        };
+        assert_eq!(from_fp, expected);
+        assert_eq!(from_json, expected);
+    }
 }
+
 /*
 TEST_DIR = os.path.join(CWD, "..", "..", "data", "test", "gf_fonts")
 SERVER_DIR = os.path.join(CWD, "..", "..", "data", "test", "servers")
@@ -345,26 +614,6 @@ WEIGHT_AXIS = file_manager.enter_context(
 @pytest.mark.parametrize(
     "type_, fp, gf_data, res",
     [
-        (
-            Family,
-            TEST_FAMILY_DIR,
-            next(
-                f
-                for f in FONTS_JSON["familyMetadataList"]
-                if f["family"] == "Maven Pro"
-            ),
-            Family(
-                name="Maven Pro",
-                version="Version 2.103",
-            ),
-        ),
-        (
-            Designer,
-            DESIGNER_DIR,
-            FAMILY_JSON["designers"][0],
-            Designer(name="Joe Prince", bio=None),
-        ),
-        (
             Axis,
             WEIGHT_AXIS,
             next(a for a in FONTS_JSON["axisRegistry"] if a["tag"] == "wght"),

@@ -25,7 +25,7 @@ path = "src/bin/push_status.rs"
 
 
 [dependencies]
-chrono = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
 gftools = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true

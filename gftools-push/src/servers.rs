@@ -10,9 +10,10 @@ use toml::Table;
 
 use gftools::GftoolsError;
 
-use super::items::{Axis, Designer, Family, FamilyMeta, PushItem};
+use super::items::{Axis, Designer, Family, FamilyMeta, Item};
 
-pub(crate) const PROD_FAMILY_DOWNLOAD: &str = "https://fonts.google.com/download?family={}";
+/// Re-exported so the push crate has a single source of truth for this url.
+pub(crate) use gftools::PROD_FAMILY_DOWNLOAD;
 
 #[derive(Default, Serialize, Deserialize)]
 struct GfServer {
@@ -130,30 +131,30 @@ impl GfServer {
         Ok(last_push)
     }
 
-    fn compare_push_item(&self, item: &PushItem) -> bool {
+    fn compare_push_item(&self, item: &Item) -> bool {
         self.find_item(item).as_ref() == Some(item)
     }
 
-    fn find_item(&self, item: &PushItem) -> Option<PushItem> {
+    fn find_item(&self, item: &Item) -> Option<Item> {
         // I don't like all the clone()s here, but I don't know how to do it better
         match item {
-            PushItem::Family(family) => self
+            Item::Family(family) => self
                 .families
                 .get(&family.name)
-                .map(|x| PushItem::Family(x.clone())),
-            PushItem::Designer(designer) => self
+                .map(|x| Item::Family(x.clone())),
+            Item::Designer(designer) => self
                 .designers
                 .get(&designer.name)
-                .map(|x| PushItem::Designer(x.clone())),
-            PushItem::FamilyMeta(family_meta) => self
+                .map(|x| Item::Designer(x.clone())),
+            Item::FamilyMeta(family_meta) => self
                 .family_meta
                 .get(&family_meta.name)
-                .map(|x| PushItem::FamilyMeta(x.clone())),
-            PushItem::Axis(axis) => self
+                .map(|x| Item::FamilyMeta(x.clone())),
+            Item::Axis(axis) => self
                 .axisregistry
                 .get(&axis.tag)
-                .map(|x| PushItem::Axis(x.clone())),
-            PushItem::AxisFallback(_) => None,
+                .map(|x| Item::Axis(x.clone())),
+            Item::AxisFallback(_) => None,
         }
     }
 
@@ -418,7 +419,10 @@ mod tests {
     use super::*;
     use expanduser::expanduser;
 
+    /// Manual smoke test: needs `~/.gf_push_config.ini` (or the env vars) and
+    /// network access, and writes `test.json` to the cwd.
     #[test]
+    #[ignore = "requires a local push config and network access"]
     fn test_name() {
         env_logger::init();
 
