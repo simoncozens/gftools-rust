@@ -192,7 +192,12 @@ mod tests {
                 4,
             ),
             // Live, so it must not be pushed again.
-            item("ofl/alreadylive", PushStatus::Live, PushList::ToProduction, 5),
+            item(
+                "ofl/alreadylive",
+                PushStatus::Live,
+                PushList::ToProduction,
+                5,
+            ),
         ]);
 
         let (to_sandbox, to_production) = combine(&sandbox_file, &production_file, &board);
@@ -206,10 +211,7 @@ mod tests {
             ["ofl/newfamily", "ofl/upgrademe", "ofl/upgrademe"]
         );
         // `ofl/alreadylive` is live, so it is not pushed again.
-        assert_eq!(
-            paths(&to_production),
-            ["ofl/insandbox", "ofl/readyforprod"]
-        );
+        assert_eq!(paths(&to_production), ["ofl/insandbox", "ofl/readyforprod"]);
 
         // The duplicate is resolved when the file is rendered.
         let root = tempfile::TempDir::new().unwrap();

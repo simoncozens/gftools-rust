@@ -3,10 +3,8 @@
 //! A [`PushItem`] is one row of the Traffic Jam: a path in google/fonts, a
 //! category, a status, and the pull request it came from. [`PushItems`] is the
 //! collection, with the path-normalisation rules that turn a list of changed
-//! files into a list of things to push.
-//!
-//! Not ported yet: `set_server`, `set_pushlist`, `block` and
-//! `bump_pushlist`, which mutate the board.
+//! files into a list of things to push, plus the board mutations which move an
+//! item's status and list along.
 
 use std::collections::HashSet;
 use std::fmt::Display;
@@ -18,11 +16,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::pin;
 
+use crate::config::PushConfig;
 use crate::items::{Axis, Designer, Family, FamilyMeta, Item};
 use crate::utils::{google_path_to_repo_path, repo_path_to_google_path};
 
-/// `GH_TOKEN` is what the rest of gftools uses — `has_gh_token`, the Python
-/// clients and the docs — so we read that rather than `GITHUB_TOKEN`.
+struct OctocrabHelper<'a> {
+    octocrab: octocrab::Octocrab,
+    config: &'a PushConfig,
+}
+
 fn octocrab_with_auth() -> Result<octocrab::Octocrab, GftoolsError> {
     let token = std::env::var("GH_TOKEN")
         .map_err(|_| GftoolsError::Misc("GH_TOKEN is not set".to_string()))?;
@@ -32,6 +34,112 @@ fn octocrab_with_auth() -> Result<octocrab::Octocrab, GftoolsError> {
         .map_err(|e| GftoolsError::Misc(format!("Failed to create Octocrab instance: {}", e)))
 }
 
+/// The `updateProjectV2ItemFieldValue` payload.
+///
+/// The document goes in `query` even though it is a mutation: that is the key
+/// GraphQL reads the operation from, and Python's client posts the same shape
+/// (`gfgithub._run_graphql`).
+fn update_item_payload(project_id: &str, item_id: &str, field_id: &str, option_id: &str) -> Value {
+    json!({
+        "query": include_str!("mutation.graphql"),
+        "variables": {
+            "projectId": project_id,
+            "itemId": item_id,
+            "fieldId": field_id,
+            "singleSelectOptionId": option_id,
+        }
+    })
+}
+
+impl<'a> OctocrabHelper<'a> {
+    pub fn new(config: &'a PushConfig) -> Result<Self, GftoolsError> {
+        let octocrab = octocrab_with_auth()?;
+        Ok(Self { octocrab, config })
+    }
+
+    async fn update_traffic_jam_status(
+        &self,
+        item_id: &str,
+        server: &PushStatus,
+    ) -> Result<(), GftoolsError> {
+        let option_id = match server {
+            PushStatus::PrGf => self.config.board_meta("pr_gf_id"),
+            PushStatus::InDev => self.config.board_meta("in_dev_id"),
+            PushStatus::InSandbox => self.config.board_meta("in_sandbox_id"),
+            PushStatus::Live => self.config.board_meta("live_id"),
+        }?;
+
+        // The document goes in `query` even though it is a mutation: that is the
+        // key GraphQL reads the operation from, and Python's client posts the
+        // same shape (`gfgithub._run_graphql`).
+        let _: Value = self
+            .octocrab
+            .graphql(&update_item_payload(
+                self.config.board_meta("traffic_jam_id")?,
+                item_id,
+                self.config.board_meta("status_field_id")?,
+                option_id,
+            ))
+            .await
+            .map_err(|e| {
+                GftoolsError::GitHub(format!("Failed to set the status of {item_id}: {e}"))
+            })?;
+        Ok(())
+    }
+
+    async fn update_traffic_jam_list(
+        &self,
+        item_id: &str,
+        list: &PushList,
+    ) -> Result<(), GftoolsError> {
+        let list_id = match list {
+            PushList::ToSandbox => self.config.board_meta("to_sandbox_id"),
+            PushList::ToProduction => self.config.board_meta("to_production_id"),
+            PushList::Blocked => self.config.board_meta("blocked_id"),
+        }?;
+        let _: Value = self
+            .octocrab
+            .graphql(&update_item_payload(
+                self.config.board_meta("traffic_jam_id")?,
+                item_id,
+                self.config.board_meta("list_field_id")?,
+                list_id,
+            ))
+            .await
+            .map_err(|e| {
+                GftoolsError::GitHub(format!("Failed to set the list of {item_id}: {e}"))
+            })?;
+        Ok(())
+    }
+
+    async fn update_gf_project(
+        &self,
+        project_item_id: &str,
+        status: &PushStatus,
+    ) -> Result<(), GftoolsError> {
+        let option_id = match status {
+            PushStatus::PrGf => self.config.gf_board_meta("pr_gf_id"),
+            PushStatus::InDev => self.config.gf_board_meta("in_dev_id"),
+            PushStatus::InSandbox => self.config.gf_board_meta("in_sandbox_id"),
+            PushStatus::Live => self.config.gf_board_meta("live_id"),
+        }?;
+        let _: Value = self
+            .octocrab
+            .graphql(&update_item_payload(
+                self.config.gf_board_meta("board_id")?,
+                project_item_id,
+                self.config.gf_board_meta("status_field_id")?,
+                option_id,
+            ))
+            .await
+            .map_err(|e| {
+                GftoolsError::GitHub(format!(
+                    "Failed to update google/fonts board item {project_item_id}: {e}"
+                ))
+            })?;
+        Ok(())
+    }
+}
 struct BoardItemsFromGithub {
     items: Vec<Value>,
     last_update: String,
@@ -465,6 +573,74 @@ impl PushItem {
         );
         json
     }
+
+    pub async fn set_server(
+        &mut self,
+        server: PushStatus,
+        config: &PushConfig,
+    ) -> Result<(), GftoolsError> {
+        let client = OctocrabHelper::new(config)?;
+        match &self.id {
+            Some(id) => client.update_traffic_jam_status(id, &server).await?,
+            // Python interpolates the missing id into the mutation, which sends
+            // the string "None"; say so instead.
+            None => log::warn!(
+                "{} is not on the board, so its status was not set",
+                self.path.display()
+            ),
+        }
+        self.status = Some(server);
+        // Update the projects board as well
+        for linked_issue in self.linked_issues.iter() {
+            let Some(project_items) = linked_issue
+                .pointer("/projectItems/nodes")
+                .and_then(Value::as_array)
+            else {
+                continue;
+            };
+            for project_item in project_items {
+                if let Some(id) = project_item["id"].as_str() {
+                    client.update_gf_project(id, &server).await?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn set_pushlist(
+        &mut self,
+        pushlist: PushList,
+        config: &PushConfig,
+    ) -> Result<(), GftoolsError> {
+        let client = OctocrabHelper::new(config)?;
+        match &self.id {
+            Some(id) => client.update_traffic_jam_list(id, &pushlist).await?,
+            None => log::warn!(
+                "{} is not on the board, so its list was not set",
+                self.path.display()
+            ),
+        }
+        self.push_list = Some(pushlist);
+        Ok(())
+    }
+
+    pub async fn block(&mut self, config: &PushConfig) -> Result<(), GftoolsError> {
+        log::info!("Blocking {}", self.path.display());
+        self.set_pushlist(PushList::Blocked, config).await
+    }
+
+    pub async fn bump_pushlist(&mut self, config: &PushConfig) -> Result<(), GftoolsError> {
+        match &self.push_list {
+            None => self.set_pushlist(PushList::ToSandbox, config).await,
+            Some(PushList::ToSandbox) => self.set_pushlist(PushList::ToProduction, config).await,
+            Some(PushList::ToProduction) => {
+                log::warn!("No push list beyond to_production, keeping {} in to_production", self.path.display());
+                Ok(())
+            }
+            // Only `Blocked` can reach this, which Python raises for as well.
+            Some(list) => Err(GftoolsError::Misc(format!("{list} is not supported"))),
+        }
+    }
 }
 
 impl PartialEq for PushItem {
@@ -845,6 +1021,24 @@ impl From<BoardItemsFromGithub> for PushItems {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The board mutations are the one part of this module which cannot be
+    /// exercised without a token, so pin the payload they send: GitHub reads the
+    /// document from `query`, even when it is a mutation.
+    #[test]
+    fn test_update_item_payload() {
+        let payload = update_item_payload("PROJECT", "ITEM", "FIELD", "OPTION");
+        let document = payload["query"].as_str().unwrap();
+        assert!(
+            document.starts_with("mutation($projectId: ID!"),
+            "{document}"
+        );
+        assert!(document.contains("updateProjectV2ItemFieldValue"));
+        assert_eq!(payload["variables"]["projectId"], "PROJECT");
+        assert_eq!(payload["variables"]["itemId"], "ITEM");
+        assert_eq!(payload["variables"]["fieldId"], "FIELD");
+        assert_eq!(payload["variables"]["singleSelectOptionId"], "OPTION");
+    }
 
     fn item(path: &str, category: PushCategory, url: &str) -> PushItem {
         PushItem {

@@ -444,6 +444,18 @@ impl Item {
         }
         .unwrap_or(Value::Null)
     }
+
+    /// The name this item is known by, which is what Python's `.name` gives —
+    /// except for an axis, which Python would fail on: an axis has a `tag`.
+    pub fn name(&self) -> &str {
+        match self {
+            Item::Family(v) => &v.name,
+            Item::AxisFallback(v) => &v.name,
+            Item::Axis(v) => &v.tag,
+            Item::FamilyMeta(v) => &v.name,
+            Item::Designer(v) => &v.name,
+        }
+    }
 }
 
 fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>

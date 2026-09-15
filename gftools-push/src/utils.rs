@@ -2,6 +2,9 @@ use chrono::{Local, TimeZone};
 use gftools::GftoolsError;
 use gix::Repository;
 use gix::object::tree::diff::{Action, ChangeDetached};
+use serde::Serialize;
+use serde_json::Value;
+use serde_json::ser::PrettyFormatter;
 use std::convert::Infallible;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -99,6 +102,20 @@ pub fn branch_matches_googlefonts_main(path: &Path) -> Result<bool, GftoolsError
         ));
     }
     Ok(true)
+}
+
+/// Write JSON with Python's `indent=4`.
+///
+/// Keys come out sorted, because `serde_json` is built without
+/// `preserve_order`; Python keeps whatever order the server sent. Both sides of
+/// a comparison are sorted the same way, so this only shows up in the output.
+pub fn write_json(path: &Path, value: &Value) -> Result<(), GftoolsError> {
+    let file = std::fs::File::create(path)?;
+    let mut serializer =
+        serde_json::Serializer::with_formatter(file, PrettyFormatter::with_indent(b"    "));
+    value
+        .serialize(&mut serializer)
+        .map_err(|e| GftoolsError::Misc(format!("Failed to serialize {}: {e}", path.display())))
 }
 
 /// Paths which differ between the index and the working tree.

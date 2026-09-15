@@ -19,3 +19,7 @@ protobuf = { workspace = true }
 fontspector-hotfix = { workspace = true }
 kurbo = { workspace = true }
 tabled = { workspace = true }
+gix = { workspace = true }
+
+[lints.clippy]
+result_large_err = "allow"

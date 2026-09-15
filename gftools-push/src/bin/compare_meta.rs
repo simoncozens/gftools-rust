@@ -11,8 +11,7 @@ use std::process::Command;
 use clap::{ArgGroup, Parser};
 use gftools::{GftoolsError, strip_json_guard};
 use gftools_push::config::PushConfig;
-use serde::Serialize;
-use serde_json::ser::PrettyFormatter;
+use gftools_push::utils::write_json;
 use serde_json::{Map, Value, json};
 
 /// What we return from `munge_family` for a document with no family in it.
@@ -295,15 +294,6 @@ fn designer_family<'a>(root: &'a Value, designer: &str) -> Option<&'a str> {
         .as_str()
 }
 
-fn write_json(path: &Path, value: &Value) -> Result<(), GftoolsError> {
-    let file = std::fs::File::create(path)?;
-    let mut serializer =
-        serde_json::Serializer::with_formatter(file, PrettyFormatter::with_indent(b"    "));
-    value
-        .serialize(&mut serializer)
-        .map_err(|e| GftoolsError::Misc(format!("Failed to serialize {}: {e}", path.display())))
-}
-
 /// Show the two files side by side in vim and save the result as HTML.
 ///
 /// `-n` keeps vim from writing swap files, so Python's pre-emptive delete of
@@ -448,6 +438,8 @@ mod tests {
 
     #[test]
     fn test_write_json_uses_four_space_indent() {
+        // The writer lives in `gftools_push::utils::write_json`; this pins the
+        // shape `compare_meta` and `manage_traffic_jam` write.
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("meta.json");
         write_json(
@@ -456,7 +448,6 @@ mod tests {
         )
         .unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
-        // Python's `json.dump(..., indent=4)`, with sorted keys.
         assert_eq!(
             text,
             "{\n    \"coverage\": [\n        \"latin\"\n    ],\n    \"family\": \"Maven Pro\"\n}"

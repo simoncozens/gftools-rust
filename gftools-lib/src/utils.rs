@@ -4,8 +4,16 @@ use crate::error::GftoolsError;
 
 pub const PROD_FAMILY_DOWNLOAD: &str = "https://fonts.google.com/download?family={FAMILY}";
 
-#[allow(dead_code)] // We'll use it one day
-pub fn download_family_from_google_fonts(
+/// Remove Google's `)]}'` XSSI guard, which prefixes some endpoint responses.
+pub fn strip_json_guard(text: &str) -> &str {
+    text.strip_prefix(")]}'")
+        .unwrap_or(text)
+        .trim_start_matches('\n')
+}
+
+/// Download a family from a Google Fonts server, returning the font files keyed
+/// by filename. Nothing is written to disk.
+pub async fn download_family_from_google_fonts(
     family: &str,
     dl_url_override: Option<&str>,
     ignore_static: bool,
@@ -20,22 +28,16 @@ pub fn download_family_from_google_fonts(
         .replace("{FAMILY}", &family)
         .replace("{}", &family);
 
-    let request = reqwest::blocking::Client::new().get(request_url);
-    let manifest: serde_json::Value = request
+    let client = reqwest::Client::new();
+    let text = client
+        .get(&request_url)
         .send()
-        .and_then(|response| response.text())
-        .map_or_else(
-            |e| {
-                Err(GftoolsError::Misc(format!(
-                    "Failed to fetch metadata: {}",
-                    e
-                )))
-            },
-            |s| {
-                serde_json::from_str(&s[5..])
-                    .map_err(|e| GftoolsError::Misc(format!("Failed to parse metadata: {}", e)))
-            },
-        )?;
+        .await?
+        .error_for_status()?
+        .text()
+        .await?;
+    let manifest: serde_json::Value = serde_json::from_str(strip_json_guard(&text))
+        .map_err(|e| GftoolsError::Misc(format!("Failed to parse metadata: {}", e)))?;
     let mut fonts = BTreeMap::new();
     for file in manifest
         .as_object()
@@ -65,10 +67,13 @@ pub fn download_family_from_google_fonts(
         {
             continue;
         }
-        let contents = reqwest::blocking::get(url)
-            .map_err(|e| GftoolsError::Misc(format!("Failed to fetch font: {}", e)))?
+        let contents = client
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()?
             .bytes()
-            .map_err(|e| GftoolsError::Misc(format!("Failed to fetch font: {}", e)))?;
+            .await?;
         fonts.insert(filename.to_string(), contents.to_vec());
     }
     Ok(fonts)

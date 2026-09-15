@@ -13,7 +13,9 @@ use std::{fmt::Display, path::Path};
 
 pub use error::GftoolsError;
 pub use names::{update_name_table, AxisLimits, AxisTriple};
-pub use utils::{download_family_from_google_fonts, PROD_FAMILY_DOWNLOAD};
+pub use utils::{
+    download_family_from_google_fonts, is_google_fonts_repo, strip_json_guard, PROD_FAMILY_DOWNLOAD,
+};
 // Have to make this pub so our scripts can use it
 #[allow(unused_imports)]
 pub(crate) use gf_metadata::DesignerInfoProto;

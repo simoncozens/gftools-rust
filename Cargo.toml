@@ -65,3 +65,5 @@ gftools = { path = "gftools-lib" }
 norad = "0.18.4"
 chrono = "0.4.45"
 scraper = "0.23.1"
+gix = "0.87.1"
+gix-refspec = "0.45.1"

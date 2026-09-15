@@ -131,6 +131,55 @@ pub fn default_config_path() -> Result<PathBuf, GftoolsError> {
     Ok(home.join(CONFIG_FILENAME))
 }
 
+pub enum GfBoardStatusOptionId {
+    PrGf(String),
+    InSandbox(String),
+    Live(String),
+}
+
+impl GfBoardStatusOptionId {
+    pub fn pr_gf(from_config: &PushConfig) -> Result<Self, GftoolsError> {
+        Ok(GfBoardStatusOptionId::PrGf(
+            from_config.gf_board_meta("pr_gf_id")?.to_string(),
+        ))
+    }
+    pub fn in_sandbox(from_config: &PushConfig) -> Result<Self, GftoolsError> {
+        Ok(GfBoardStatusOptionId::InSandbox(
+            from_config.gf_board_meta("in_sandbox_id")?.to_string(),
+        ))
+    }
+    pub fn live(from_config: &PushConfig) -> Result<Self, GftoolsError> {
+        Ok(GfBoardStatusOptionId::Live(
+            from_config.gf_board_meta("live_id")?.to_string(),
+        ))
+    }
+}
+
+pub enum ListOptionId {
+    ToSandbox(String),
+    ToProduction(String),
+    Blocked(String),
+}
+
+impl ListOptionId {
+    pub fn to_sandbox(from_config: &PushConfig) -> Result<Self, GftoolsError> {
+        Ok(ListOptionId::ToSandbox(
+            from_config.board_meta("to_sandbox_id")?.to_string(),
+        ))
+    }
+    pub fn to_production(from_config: &PushConfig) -> Result<Self, GftoolsError> {
+        Ok(ListOptionId::ToProduction(
+            from_config.board_meta("to_production_id")?.to_string(),
+        ))
+    }
+
+    pub fn blocked(from_config: &PushConfig) -> Result<Self, GftoolsError> {
+        Ok(ListOptionId::Blocked(
+            from_config.board_meta("blocked_id")?.to_string(),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
