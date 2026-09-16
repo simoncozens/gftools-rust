@@ -48,6 +48,10 @@ name = "gftools-list-italicangle"
 path = "src/list_italicangle.rs"
 
 [[bin]]
+name = "gftools-list-name"
+path = "src/list_name.rs"
+
+[[bin]]
 name = "gftools-list-panose"
 path = "src/list_panose.rs"
 
@@ -110,6 +114,8 @@ gftools = { workspace = true }
 anyhow = { workspace = true }
 norad = { workspace = true }
 glob = "0.3.4"
+csv = "1.4.0"
+serde.workspace = true
 
 [dev-dependencies]
 env_logger = { workspace = true }
