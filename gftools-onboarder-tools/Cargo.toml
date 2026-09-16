@@ -1,0 +1,71 @@
+[package]
+name = "gftools-onboarder-tools"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "gftools-add-font"
+path = "src/bin/add_font.rs"
+
+[[bin]]
+name = "gftools-compare-meta"
+path = "src/bin/compare_meta.rs"
+
+[[bin]]
+name = "gftools-gen-push-lists"
+path = "src/bin/gen_push_lists.rs"
+
+[[bin]]
+name = "gftools-manage-traffic-jam"
+path = "src/bin/manage_traffic_jam.rs"
+
+[[bin]]
+name = "gftools-packager"
+path = "src/bin/packager.rs"
+
+[[bin]]
+name = "gftools-push-stats"
+path = "src/bin/push_stats.rs"
+
+[[bin]]
+name = "gftools-push-status"
+path = "src/bin/push_status.rs"
+
+
+[dependencies]
+chrono = { workspace = true, features = ["serde"] }
+clap = { workspace = true, features = ["derive"] }
+dirs = { workspace = true }
+env_logger = { workspace = true }
+gftools = { workspace = true }
+gf-metadata = { workspace = true }
+gix = { workspace = true }
+google-fonts-axisregistry = { workspace = true }
+google-fonts-subsets = { workspace = true }
+log.workspace = true
+protobuf = { workspace = true }
+reqwest.workspace = true
+scraper = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+serde_json_path_to_error.workspace = true
+serde_yaml_ng = { workspace = true }
+skrifa.workspace = true
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+toml.workspace = true
+zip = { workspace = true }
+octocrab = { version = "0.54.2", features = ["stream"] }
+futures-util = "0.3.34"
+
+# Added when the stages that need them land (see PORTING_PLAN.md §10):
+#   image                 (P3 - article media)
+# No language/icu deps here: metadata writing and primary_script live in gftools-lib.
+
+[dev-dependencies]
+expanduser = { workspace = true }
+pretty_assertions = { workspace = true }
+
+[lints.clippy]
+result_large_err = "allow"

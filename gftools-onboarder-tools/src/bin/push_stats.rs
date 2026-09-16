@@ -10,9 +10,9 @@ use std::path::{Path, PathBuf};
 use chrono::Local;
 use clap::Parser;
 use gftools::GftoolsError;
-use gftools_push::read_server_file;
-use gftools_push::trafficjam::PushItems;
-use gftools_push::utils::repo_commits;
+use gftools_onboarder_tools::push::trafficjam::PushItems;
+use gftools_onboarder_tools::push::utils::repo_commits;
+use gftools_onboarder_tools::read_server_file;
 use serde_json::json;
 
 /// The report template, embedded so the binary needs no data files at runtime.

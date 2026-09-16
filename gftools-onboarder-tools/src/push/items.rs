@@ -9,7 +9,7 @@ use skrifa::{FontRef, MetadataProvider, string::StringId};
 use gf_metadata::{AxisProto, DesignerInfoProto, FamilyProto};
 use gftools::{GftoolsError, download_family_from_google_fonts, font_version, parse_pb};
 
-use crate::utils::google_path_to_repo_path;
+use crate::push::utils::google_path_to_repo_path;
 
 /// Read an HTML file and reduce it to plain text. `None` when there is nothing
 /// to read.
@@ -469,15 +469,15 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::servers::PROD_FAMILY_DOWNLOAD;
+    use crate::push::servers::PROD_FAMILY_DOWNLOAD;
 
     use super::*;
     use pretty_assertions::assert_eq;
 
     const CRATE_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
-    const FAMILY_JSON: &str = include_str!("../data/test/servers/family.json");
-    const FONTS_JSON: &str = include_str!("../data/test/servers/fonts.json");
+    const FAMILY_JSON: &str = include_str!("../../data/test/servers/family.json");
+    const FONTS_JSON: &str = include_str!("../../data/test/servers/fonts.json");
 
     #[test]
     fn test_family_meta() {

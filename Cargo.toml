@@ -1,5 +1,10 @@
 [workspace]
-members = ["gftools-bin", "gftools-lib", "gftools-builder", "gftools-push"]
+members = [
+    "gftools-bin",
+    "gftools-lib",
+    "gftools-builder",
+    "gftools-onboarder-tools",
+]
 resolver = "3"
 
 [workspace.dependencies]

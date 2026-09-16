@@ -14,11 +14,11 @@ use std::process::{Command, Stdio};
 
 use clap::{Parser, ValueEnum};
 use gftools::GftoolsError;
-use gftools_push::config::PushConfig;
-use gftools_push::items::Item;
-use gftools_push::servers::GfServers;
-use gftools_push::trafficjam::{PushCategory, PushItem, PushItems, PushStatus};
-use gftools_push::utils::{branch_matches_googlefonts_main, write_json};
+use gftools_onboarder_tools::config::PushConfig;
+use gftools_onboarder_tools::push::items::Item;
+use gftools_onboarder_tools::push::servers::GfServers;
+use gftools_onboarder_tools::push::trafficjam::{PushCategory, PushItem, PushItems, PushStatus};
+use gftools_onboarder_tools::push::utils::{branch_matches_googlefonts_main, write_json};
 use serde_json::{Map, Value, json};
 
 /// Python hardcodes the production site; only the dev and sandbox hosts come
@@ -277,10 +277,14 @@ fn apply_filters(
         items = items.in_sandbox();
     }
     if filters.contains(&Filter::Upgrade) {
-        items.0.retain(|item| item.category == Some(PushCategory::Upgrade));
+        items
+            .0
+            .retain(|item| item.category == Some(PushCategory::Upgrade));
     }
     if filters.contains(&Filter::New) {
-        items.0.retain(|item| item.category == Some(PushCategory::New));
+        items
+            .0
+            .retain(|item| item.category == Some(PushCategory::New));
     }
     if filters.contains(&Filter::NoFonts) {
         items.0.retain(|item| {
@@ -334,11 +338,16 @@ fn push_item_fields(item: &PushItem) -> Map<String, Value> {
     );
     res.insert(
         "merged".to_string(),
-        item.merged.map(|merged| json!(merged)).unwrap_or(Value::Null),
+        item.merged
+            .map(|merged| json!(merged))
+            .unwrap_or(Value::Null),
     );
     res.insert(
         "id".to_string(),
-        item.id.as_deref().map(|id| json!(id)).unwrap_or(Value::Null),
+        item.id
+            .as_deref()
+            .map(|id| json!(id))
+            .unwrap_or(Value::Null),
     );
     res.insert(
         "linked_issues".to_string(),
@@ -350,7 +359,11 @@ fn push_item_fields(item: &PushItem) -> Map<String, Value> {
 /// The specimen links Python adds for new and upgraded families. A host which
 /// is not configured is left out, where Python would fail to start without its
 /// `dev_url`.
-fn specimen_urls(item: &Item, dev_url: Option<&str>, sandbox_url: Option<&str>) -> Map<String, Value> {
+fn specimen_urls(
+    item: &Item,
+    dev_url: Option<&str>,
+    sandbox_url: Option<&str>,
+) -> Map<String, Value> {
     let name = item.name().replace(' ', "+");
     let mut res = Map::new();
     for (key, base) in [
@@ -510,7 +523,9 @@ impl ItemChecker<'_> {
         if self.servers.production.compare_push_item(&item) {
             push_item.set_server(PushStatus::Live, self.config).await?;
         } else if self.servers.sandbox.compare_push_item(&item) {
-            push_item.set_server(PushStatus::InSandbox, self.config).await?;
+            push_item
+                .set_server(PushStatus::InSandbox, self.config)
+                .await?;
         } else {
             // Python's third branch is `servers.dev.find_item(item)`, but
             // `GFServers` has no `dev` server, so it raises AttributeError for
@@ -633,7 +648,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    use gftools_push::items::Family;
+    use gftools_onboarder_tools::push::items::Family;
 
     const CRATE_ROOT: &str = env!("CARGO_MANIFEST_DIR");
     const PR: &str = "https://github.com/google/fonts/pull/1234";
@@ -698,7 +713,10 @@ mod tests {
     ) -> ItemChecker<'a> {
         ItemChecker {
             push_items: items,
-            gf_fp: PathBuf::from(CRATE_ROOT).join("data").join("test").join("gf_fonts"),
+            gf_fp: PathBuf::from(CRATE_ROOT)
+                .join("data")
+                .join("test")
+                .join("gf_fonts"),
             servers,
             config,
             skip_pr: None,
@@ -747,10 +765,7 @@ mod tests {
         assert_eq!(filters(&["-f", "in_dev"]), ["ofl/upgrade", "ofl/new"]);
         assert_eq!(filters(&["-f", "in_sandbox"]), ["ofl/metadata"]);
         // Several filters are applied in turn.
-        assert_eq!(
-            filters(&["-f", "in_dev", "upgrade"]),
-            ["ofl/upgrade"]
-        );
+        assert_eq!(filters(&["-f", "in_dev", "upgrade"]), ["ofl/upgrade"]);
     }
 
     #[test]
@@ -865,12 +880,7 @@ mod tests {
         let servers = &mut servers();
         let config = config();
         // The checkout fixture has `ofl/mavenpro` and nothing else.
-        let checker = checker(
-            Vec::new(),
-            servers,
-            &config,
-            "",
-        );
+        let checker = checker(Vec::new(), servers, &config, "");
 
         let present = item(
             "ofl/mavenpro",
@@ -948,8 +958,12 @@ mod tests {
             Some(true),
         );
         assert_eq!(
-            specimen_urls(&metadata.item(&checker.gf_fp).unwrap(), Some("d"), Some("s"))
-                .len(),
+            specimen_urls(
+                &metadata.item(&checker.gf_fp).unwrap(),
+                Some("d"),
+                Some("s")
+            )
+            .len(),
             3
         );
     }
@@ -988,6 +1002,9 @@ mod tests {
         let mut checker = checker(one_item(), servers, &config, "");
         let mut push_item = checker.push_items[0].clone();
         // End of input quits, where Python raises EOFError.
-        assert_eq!(checker.user_input(&mut push_item).await.unwrap(), Flow::Quit);
+        assert_eq!(
+            checker.user_input(&mut push_item).await.unwrap(),
+            Flow::Quit
+        );
     }
 }

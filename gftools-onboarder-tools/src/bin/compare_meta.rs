@@ -10,8 +10,8 @@ use std::process::Command;
 
 use clap::{ArgGroup, Parser};
 use gftools::{GftoolsError, strip_json_guard};
-use gftools_push::config::PushConfig;
-use gftools_push::utils::write_json;
+use gftools_onboarder_tools::config::PushConfig;
+use gftools_onboarder_tools::push::utils::write_json;
 use serde_json::{Map, Value, json};
 
 /// What we return from `munge_family` for a document with no family in it.
@@ -438,7 +438,7 @@ mod tests {
 
     #[test]
     fn test_write_json_uses_four_space_indent() {
-        // The writer lives in `gftools_push::utils::write_json`; this pins the
+        // The writer lives in `gftools_onboarder_tools::push::utils::write_json`; this pins the
         // shape `compare_meta` and `manage_traffic_jam` write.
         let dir = tempfile::TempDir::new().unwrap();
         let path = dir.path().join("meta.json");

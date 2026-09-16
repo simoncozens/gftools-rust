@@ -10,8 +10,8 @@ use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use gftools::{GftoolsError, is_google_fonts_repo};
-use gftools_push::trafficjam::{PushItems, PushList, PushStatus};
-use gftools_push::utils::{branch_matches_googlefonts_main, worktree_changes};
+use gftools_onboarder_tools::push::trafficjam::{PushItems, PushList, PushStatus};
+use gftools_onboarder_tools::push::utils::{branch_matches_googlefonts_main, worktree_changes};
 
 /// `tags/all/families.csv` is not on the board, so a local edit to it is added
 /// to `to_sandbox.txt` by hand. Python puts it in a `"tags"` bin which its
@@ -134,7 +134,7 @@ fn combine(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gftools_push::trafficjam::{PushCategory, PushItem};
+    use gftools_onboarder_tools::push::trafficjam::{PushCategory, PushItem};
 
     /// An item as `from_traffic_jam` builds them: a family directory, its
     /// category and the pull request which asked for it.
