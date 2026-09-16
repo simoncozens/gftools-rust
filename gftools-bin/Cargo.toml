@@ -8,13 +8,16 @@ name = "gftools-add-axis"
 path = "src/add_axis.rs"
 
 [[bin]]
+name = "gftools-check-bbox"
+path = "src/check_bbox.rs"
+
+[[bin]]
 name = "gftools-fix-fstype"
 path = "src/fix_fstype.rs"
 
 [[bin]]
 name = "gftools-fix-font"
 path = "src/fix_font.rs"
-
 
 [[bin]]
 name = "gftools-fix-gasp"
@@ -35,6 +38,10 @@ path = "src/fix_nonhinting.rs"
 [[bin]]
 name = "gftools-fix-weightclass"
 path = "src/fix_weightclass.rs"
+
+[[bin]]
+name = "gftools-list-features"
+path = "src/list_features.rs"
 
 [[bin]]
 name = "gftools-list-italicangle"
@@ -68,9 +75,6 @@ path = "src/rename_glyphs.rs"
 name = "gftools-remove-overlaps"
 path = "src/remove_overlaps.rs"
 
-[[bin]]
-name = "gftools-check-bbox"
-path = "src/check_bbox.rs"
 
 [[bin]]
 name = "gftools-ttf2cp"
@@ -105,6 +109,7 @@ google-fonts-subsets = { workspace = true }
 gftools = { workspace = true }
 anyhow = { workspace = true }
 norad = { workspace = true }
+glob = "0.3.4"
 
 [dev-dependencies]
 env_logger = { workspace = true }
