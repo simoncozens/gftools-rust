@@ -17,9 +17,9 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use skrifa::raw::tables::name::{Encoding, MacRomanMapping};
-use skrifa::{raw::TableProvider as _, FontRef};
+use skrifa::{FontRef, raw::TableProvider as _};
 use std::path::{Path, PathBuf};
-use write_fonts::{from_obj::ToOwnedTable, tables::name::Name, types::NameId, FontBuilder};
+use write_fonts::{FontBuilder, from_obj::ToOwnedTable, tables::name::Name, types::NameId};
 
 /// Update specific nameIDs in a collection of fonts with new strings.
 ///

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use clap::Parser;
-use skrifa::{raw::FontRef, MetadataProvider};
+use skrifa::{MetadataProvider, raw::FontRef};
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]

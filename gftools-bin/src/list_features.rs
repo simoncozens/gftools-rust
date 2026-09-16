@@ -1,7 +1,7 @@
 //! Tool to print GPOS and GSUB features supported by font file(s).
 use anyhow::{self, Context, Result};
 use clap::Parser;
-use skrifa::{raw::TableProvider, Tag};
+use skrifa::{Tag, raw::TableProvider};
 use std::path::PathBuf;
 
 #[derive(Parser)]

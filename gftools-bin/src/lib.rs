@@ -1,6 +1,5 @@
-use fontspector_hotfix::{apply_hotfixes, Testable};
+use fontspector_hotfix::{Testable, apply_hotfixes};
 use gftools::GftoolsError;
-use skrifa::FontRef;
 
 pub fn fix_runner(
     font_path: &str,

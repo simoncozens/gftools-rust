@@ -1,6 +1,6 @@
 use clap::{ArgAction, Parser};
-use fontspector_hotfix::{apply_hotfixes, Testable};
-use skrifa::{raw::tables::gasp::GaspRangeBehavior, raw::TableProvider, FontRef};
+use fontspector_hotfix::{Testable, apply_hotfixes};
+use skrifa::{FontRef, raw::TableProvider, raw::tables::gasp::GaspRangeBehavior};
 use write_fonts::FontBuilder;
 
 #[derive(Debug, Parser)]

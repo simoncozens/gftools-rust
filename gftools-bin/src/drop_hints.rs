@@ -1,11 +1,11 @@
 use clap::Parser;
 use gftools::GftoolsError;
-use skrifa::raw::{tables::glyf::Glyf, FontRef, ReadError, TableProvider};
+use skrifa::raw::{FontRef, ReadError, TableProvider, tables::glyf::Glyf};
 use write_fonts::{
+    FontBuilder,
     from_obj::FromTableRef,
     tables::glyf::{GlyfLocaBuilder, Glyph},
     types::{GlyphId, Tag},
-    FontBuilder,
 };
 
 #[derive(Parser)]

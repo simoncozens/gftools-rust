@@ -4,7 +4,8 @@ mod names;
 mod overlaps;
 mod utils;
 
-pub use fix::{fix_font, FixFvarTable, IncludeSourceFixes, Interactive};
+pub use fix::{FixFvarTable, IncludeSourceFixes, Interactive, fix_font};
+use google_fonts_languages::LANGUAGES;
 pub use overlaps::remove_overlaps;
 use skrifa::raw::TableProvider;
 use skrifa::string::StringId;
@@ -12,9 +13,9 @@ use skrifa::{FontRef, MetadataProvider};
 use std::{fmt::Display, path::Path};
 
 pub use error::GftoolsError;
-pub use names::{update_name_table, AxisLimits, AxisTriple};
+pub use names::{AxisLimits, AxisTriple, update_name_table};
 pub use utils::{
-    download_family_from_google_fonts, is_google_fonts_repo, strip_json_guard, PROD_FAMILY_DOWNLOAD,
+    PROD_FAMILY_DOWNLOAD, download_family_from_google_fonts, is_google_fonts_repo, strip_json_guard,
 };
 // Have to make this pub so our scripts can use it
 #[allow(unused_imports)]
@@ -33,6 +34,26 @@ where
     let data = protobuf::text_format::parse_from_str::<T>(utf8_contents)
         .map_err(GftoolsError::ProtobufParse)?;
     Ok(data)
+}
+
+pub fn write_family_metadata(data: &FamilyProto, comments: bool) -> Result<String, GftoolsError> {
+    // Rust's print_to_string doesn't handle comments. We'll do it as a post-processing step.
+    let s = protobuf::text_format::print_to_string_pretty(data);
+    if !comments {
+        return Ok(s);
+    }
+    let mut rewritten = String::new();
+    for line in s.lines() {
+        rewritten += line;
+        if line.starts_with("languages: ")
+            && let Some(lang) = line.split('"').nth(1)
+            && let Some(lang) = LANGUAGES.get(lang)
+        {
+            rewritten += &format!("  # {}", lang.name());
+        }
+        rewritten.push('\n');
+    }
+    Ok(rewritten)
 }
 
 pub fn list_some_things<T: Display>(
@@ -88,5 +109,21 @@ pub fn font_version(f: &FontRef) -> String {
         f.head()
             .map(|head| head.font_revision().to_string())
             .unwrap_or_else(|_| "0.0".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn test_roundtrip_proto() {
+        let pushster_string =
+            std::fs::read_to_string("resources/test/pushster/METADATA.pb").unwrap();
+        let pushster =
+            parse_pb::<FamilyProto>(Path::new("resources/test/pushster/METADATA.pb")).unwrap();
+        let serialized = write_family_metadata(&pushster, true).unwrap();
+        assert_eq!(pushster_string, serialized);
     }
 }
