@@ -89,6 +89,10 @@ name = "gftools-ufo-set-order"
 path = "src/ufo_set_order.rs"
 
 [[bin]]
+name = "gftools-update-nameids"
+path = "src/update_nameids.rs"
+
+[[bin]]
 name = "gftools-update-version"
 path = "src/update_version.rs"
 
@@ -118,6 +122,7 @@ csv = "1.4.0"
 serde.workspace = true
 
 [dev-dependencies]
+tempfile = { workspace = true }
 env_logger = { workspace = true }
 
 [lints.clippy]
