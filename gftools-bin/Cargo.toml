@@ -79,6 +79,10 @@ path = "src/rename_glyphs.rs"
 name = "gftools-remove-overlaps"
 path = "src/remove_overlaps.rs"
 
+[[bin]]
+name = "gftools-set-primary-script"
+path = "src/set_primary_script.rs"
+
 
 [[bin]]
 name = "gftools-ttf2cp"
