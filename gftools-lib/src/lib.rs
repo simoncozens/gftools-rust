@@ -1,3 +1,4 @@
+mod closure;
 mod error;
 mod fix;
 mod names;
@@ -11,17 +12,15 @@ use skrifa::raw::TableProvider;
 use skrifa::string::StringId;
 use skrifa::{FontRef, MetadataProvider};
 use std::{fmt::Display, path::Path};
+use unicode_script::UnicodeScript as _;
 
 pub use error::GftoolsError;
 pub use names::{AxisLimits, AxisTriple, update_name_table};
 pub use utils::{
     PROD_FAMILY_DOWNLOAD, download_family_from_google_fonts, is_google_fonts_repo, strip_json_guard,
 };
-// Have to make this pub so our scripts can use it
-#[allow(unused_imports)]
-pub(crate) use gf_metadata::DesignerInfoProto;
-#[allow(unused_imports)] // We'll use it one day
-pub(crate) use gf_metadata::{AxisProto, FamilyProto};
+// Have to make these pub so our scripts can use them
+pub use gf_metadata::{AxisProto, DesignerInfoProto, FamilyProto};
 use tabled::settings::Style;
 
 pub fn parse_pb<T>(path: &Path) -> Result<T, GftoolsError>
@@ -110,6 +109,41 @@ pub fn font_version(f: &FontRef) -> String {
             .map(|head| head.font_revision().to_string())
             .unwrap_or_else(|_| "0.0".to_string())
     }
+}
+
+pub fn primary_script(fontref: &FontRef, ignore_latin: bool) -> Option<String> {
+    let classification = closure::classify_glyphs(
+        |cp| {
+            let Some(c) = char::from_u32(cp) else {
+                return vec![];
+            };
+            let mut scripts = vec![c.script().short_name().to_string()];
+            scripts.extend(
+                c.script_extension()
+                    .iter()
+                    .map(|s| s.short_name().to_string()),
+            );
+            scripts
+        },
+        &fontref.charmap(),
+        fontref.gsub().ok().as_ref(),
+    )
+    .ok()?;
+    let mut badkeys = vec!["Zinh", "Zyyy", "Zzzz"];
+    if ignore_latin {
+        badkeys.push("Latn");
+    }
+    let mut script_counts = classification
+        .iter()
+        .filter(|(script, _)| !badkeys.contains(&script.as_str()))
+        .map(|(script, glyphs)| (script.clone(), glyphs.len()))
+        .collect::<Vec<(String, usize)>>();
+    script_counts.sort_by_key(|b| std::cmp::Reverse(b.1));
+    // If there isn't a clear winner, give up.
+    if script_counts.len() > 2 && script_counts[0].1 < 2 * script_counts[1].1 {
+        return None;
+    }
+    script_counts.first().map(|(script, _)| script.clone())
 }
 
 #[cfg(test)]

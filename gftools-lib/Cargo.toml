@@ -22,6 +22,7 @@ tabled = { workspace = true }
 gix = { workspace = true }
 pretty_assertions.workspace = true
 google-fonts-languages = "0.7.11"
+unicode-script = "0.5.8"
 
 [lints.clippy]
 result_large_err = "allow"
