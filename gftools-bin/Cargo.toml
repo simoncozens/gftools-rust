@@ -101,6 +101,10 @@ name = "gftools-update-version"
 path = "src/update_version.rs"
 
 [[bin]]
+name = "gftools-varfont-info"
+path = "src/varfont_info.rs"
+
+[[bin]]
 name = "gftools-what-subsets"
 path = "src/what_subsets.rs"
 
