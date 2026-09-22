@@ -2,7 +2,7 @@ use crate::{
     buildsystem::{DataKind, Operation, OperationOutput},
     error::ApplicationError,
 };
-use skeravar::{parse_instancing_spec, subset_font, FontRef, GlyphId, IntSet, Plan};
+use skeravar::{FontRef, GlyphId, IntSet, Plan, parse_instancing_spec, subset_font};
 use std::{os::unix::process::ExitStatusExt, process::Output};
 use tracing::info_span;
 

@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use gftools::{parse_pb, primary_script, write_family_metadata, FamilyProto};
+use gftools::{FamilyProto, parse_pb, primary_script, write_family_metadata};
 use skrifa::FontRef;
 
 #[derive(Debug, Parser)]

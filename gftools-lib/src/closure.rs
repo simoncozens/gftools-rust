@@ -2,8 +2,8 @@
 
 use crate::GftoolsError;
 use skrifa::{
-    raw::tables::gsub::{Gsub, SingleSubst, SubstitutionSubtables},
     GlyphId16,
+    raw::tables::gsub::{Gsub, SingleSubst, SubstitutionSubtables},
 };
 use std::collections::{HashMap, HashSet};
 
@@ -162,7 +162,7 @@ pub fn classify_glyphs(
 
 #[cfg(test)]
 mod tests {
-    use skrifa::{raw::TableProvider, FontRef};
+    use skrifa::{FontRef, raw::TableProvider};
 
     use super::*;
 
