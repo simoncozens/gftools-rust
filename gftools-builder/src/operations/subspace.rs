@@ -2,12 +2,7 @@ use crate::{
     buildsystem::{DataKind, Operation, OperationOutput},
     error::ApplicationError,
 };
-use read_fonts::{
-    FontRef,
-    collections::int_set::IntSet,
-    types::{GlyphId, NameId, Tag},
-};
-use skeravar::{Plan, parse_instancing_spec, subset_font};
+use skeravar::{parse_instancing_spec, subset_font, FontRef, GlyphId, IntSet, Plan};
 use std::{os::unix::process::ExitStatusExt, process::Output};
 use tracing::info_span;
 
@@ -44,7 +39,8 @@ impl Operation for Subspace {
         let bytes = inputs[0].to_bytes()?;
         let spec = parse_instancing_spec(self.args.as_deref().unwrap_or("")).unwrap();
 
-        let fontref = FontRef::new(&bytes)?;
+        let fontref = FontRef::new(&bytes)
+            .map_err(|e| ApplicationError::Other(format!("Failed to create FontRef: {}", e)))?;
         let plan = Plan::new(
             &IntSet::<GlyphId>::all(),
             &IntSet::<u32>::all(),
@@ -52,10 +48,10 @@ impl Operation for Subspace {
             skeravar::SubsetFlags::SUBSET_FLAGS_DEFAULT
                 | skeravar::SubsetFlags::SUBSET_FLAGS_UPDATE_NAME_TABLE
                 | skeravar::SubsetFlags::SUBSET_FLAGS_GLYPH_NAMES,
-            &IntSet::<Tag>::empty(),
-            &IntSet::<Tag>::all(),
-            &IntSet::<Tag>::all(),
-            &IntSet::<NameId>::all(),
+            &IntSet::empty(),
+            &IntSet::all(),
+            &IntSet::all(),
+            &IntSet::all(),
             &IntSet::<u16>::all(),
             &Some(spec),
         );
