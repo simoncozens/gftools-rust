@@ -1,5 +1,5 @@
 use clap::Parser;
-use gftools::list_some_things;
+use gftools_bin::list_some_things;
 use skrifa::raw::TableProvider;
 
 #[derive(Debug, Parser)]

@@ -1,5 +1,5 @@
 use clap::Parser;
-use gftools::list_some_things;
+use gftools_bin::list_some_things;
 use skrifa::raw::TableProvider;
 
 #[derive(Debug, Parser)]
@@ -19,11 +19,11 @@ fn main() {
             if let Ok(os2_table) = fontref.os2() {
                 Some(vec![os2_table.us_weight_class()])
             } else {
-                log::warn!("{}: No 'post' table found, skipping", filename);
+                log::warn!("{}: No 'OS/2' table found, skipping", filename);
                 None
             }
         },
-        &["italicAngle"],
+        &["usWeightClass"],
         args.csv,
     );
 }
