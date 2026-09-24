@@ -40,6 +40,10 @@ name = "gftools-fix-weightclass"
 path = "src/fix_weightclass.rs"
 
 [[bin]]
+name = "gftools-gen-stat"
+path = "src/gen_stat.rs"
+
+[[bin]]
 name = "gftools-list-copyright-notices"
 path = "src/list_copyright_notices.rs"
 
@@ -132,6 +136,7 @@ norad = { workspace = true }
 glob = "0.3.4"
 csv = "1.4.0"
 serde.workspace = true
+serde_yaml_ng = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
