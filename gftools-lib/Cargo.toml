@@ -18,11 +18,14 @@ gf-metadata = { workspace = true }
 protobuf = { workspace = true }
 fontspector-hotfix = { workspace = true }
 kurbo = { workspace = true }
-tabled = { workspace = true }
 gix = { workspace = true }
 pretty_assertions.workspace = true
 google-fonts-languages = "0.7.11"
+google-fonts-axisregistry = { workspace = true }
 unicode-script = "0.5.8"
+
+[dev-dependencies]
+serde_yaml_ng = { workspace = true }
 
 [lints.clippy]
 result_large_err = "allow"

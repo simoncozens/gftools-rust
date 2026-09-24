@@ -1,5 +1,8 @@
 use std::collections::BTreeMap;
 
+use skrifa::raw::TableProvider as _;
+use skrifa::string::StringId;
+
 use crate::error::GftoolsError;
 
 pub const PROD_FAMILY_DOWNLOAD: &str = "https://fonts.google.com/download?family={FAMILY}";
@@ -82,4 +85,71 @@ pub async fn download_family_from_google_fonts(
 /// Checks if the given path is a Google Fonts repository by verifying the presence of the `ofl` directory.
 pub fn is_google_fonts_repo(path: &std::path::Path) -> bool {
     path.join("ofl").is_dir()
+}
+
+/// Port of `gftools.utils.font_is_italic`: does the font's style name contain
+/// "Italic"?
+///
+/// The Python reads name ID 2 for platform 3, encoding 1, language 0x409, and
+/// raises if there is no such record; here a missing or undecodable record is
+/// reported as "not italic".
+pub fn font_is_italic(font: &skrifa::FontRef) -> bool {
+    let Ok(name_table) = font.name() else {
+        return false;
+    };
+    let string_data = name_table.string_data();
+    name_table
+        .name_record()
+        .iter()
+        .find(|record| {
+            record.name_id() == StringId::SUBFAMILY_NAME
+                && record.platform_id() == 3
+                && record.encoding_id() == 1
+                && record.language_id() == 0x409
+        })
+        .and_then(|record| record.string(string_data).ok())
+        .map(|name| name.to_string().contains("Italic"))
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use skrifa::FontRef;
+    use write_fonts::{
+        FontBuilder,
+        tables::{
+            maxp::Maxp,
+            name::{Name, NameRecord},
+        },
+        types::NameId,
+    };
+
+    /// A minimal font whose subfamily name is `subfamily`, so that the
+    /// positive case can be tested without a fixture.
+    fn font_with_subfamily(subfamily: &str) -> Vec<u8> {
+        let records = vec![NameRecord::new(
+            3,
+            1,
+            0x409,
+            NameId::SUBFAMILY_NAME,
+            subfamily.to_string().into(),
+        )];
+        let mut builder = FontBuilder::new();
+        builder.add_table(&Maxp::default()).unwrap();
+        builder.add_table(&Name::new(records)).unwrap();
+        builder.build()
+    }
+
+    #[test]
+    fn test_font_is_italic() {
+        let italic = font_with_subfamily("Italic");
+        assert!(font_is_italic(&FontRef::new(&italic).unwrap()));
+        let bold_italic = font_with_subfamily("Bold Italic");
+        assert!(font_is_italic(&FontRef::new(&bold_italic).unwrap()));
+        let regular = font_with_subfamily("Regular");
+        assert!(!font_is_italic(&FontRef::new(&regular).unwrap()));
+        let roboto = std::fs::read("resources/test/Roboto[wdth,wght].ttf").unwrap();
+        assert!(!font_is_italic(&FontRef::new(&roboto).unwrap()));
+    }
 }
