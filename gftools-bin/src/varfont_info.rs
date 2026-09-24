@@ -7,13 +7,6 @@
 //! Lists the axes and named instances declared in a variable font's `fvar`
 //! table, the axis values in its `STAT` table, and the `name` table entries
 //! which neither of those already accounts for.
-//!
-//! This follows Simon's `dump-names` script rather than the original Python
-//! `varfont_info`, which it replaces: as well as the extra tables, a name ID
-//! with no record is reported as `[?nameID=N?]` (and 0xFFFF as `[anonymous]`)
-//! instead of being left blank, and a font without an `fvar` table is still
-//! dumped.
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 

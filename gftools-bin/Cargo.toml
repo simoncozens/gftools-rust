@@ -40,6 +40,10 @@ name = "gftools-fix-weightclass"
 path = "src/fix_weightclass.rs"
 
 [[bin]]
+name = "gftools-list-copyright-notices"
+path = "src/list_copyright_notices.rs"
+
+[[bin]]
 name = "gftools-list-features"
 path = "src/list_features.rs"
 
