@@ -6,8 +6,10 @@ use crate::{
     recipe::{ConfigOperation, Step},
 };
 use babelfont::{DesignLocation, UserLocation};
+use gftools::StatConfig;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 pub mod addsubset;
 pub mod autohint;
@@ -55,7 +57,7 @@ impl OpStep {
             OpStep::Fix => Box::new(fix::Fix::new()),
             OpStep::Fontc => Box::new(fontc::Fontc::new()),
             OpStep::Glyphs2UFO => Box::new(glyphs2ufo::Glyphs2UFO),
-            OpStep::BuildStat => Box::new(buildstat::BuildStat),
+            OpStep::BuildStat => Box::new(buildstat::BuildStat::default()),
             OpStep::Compress => Box::new(compress::Compress),
             OpStep::AddSubset => Box::new(addsubset::AddSubset::new()),
             OpStep::Subspace => Box::new(subspace::Subspace::new()),
@@ -146,10 +148,11 @@ impl ConfigOperationBuilder {
         self
     }
 
-    pub fn buildstat(mut self, others: &[String]) -> Self {
+    pub fn buildstat(mut self, others: &[String], config: &Option<StatConfig>) -> Self {
         self.steps.push(Step::OperationStep {
             operation: OpStep::BuildStat,
-            extra: HashMap::new(),
+            // Because the config is either a map or a list, wrap it in a map
+            extra: Self::to_extra(&json!({ "config": config })),
             args: None,
             input_file: None,
             needs: others.to_vec(),

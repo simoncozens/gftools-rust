@@ -104,6 +104,14 @@ pub struct GoogleFontsOptions {
     // Options for adding subsets
     #[serde(default)]
     pub include_subsets: Vec<IncludeSubsetsOptions>,
+
+    // We don't support STAT table configs for now. This is because inside
+    // gftools-builder we don't have access to the final filenames, and we
+    // need them...
+
+    // STAT table configuration
+    // #[serde(flatten, default)]
+    // pub stat_config: Option<gftools::StatConfig>,
 }
 
 impl Default for GoogleFontsOptions {
@@ -488,7 +496,8 @@ impl GoogleFontsProvider {
 
         builder = builder.fix(&self.options.fix_config);
         if let Some(siblings) = siblings {
-            builder = builder.buildstat(&siblings);
+            builder = builder.buildstat(&siblings, &None);
+            // builder = builder.buildstat(&siblings, &self.options.stat_config);
         }
 
         if self.options.build_webfont {

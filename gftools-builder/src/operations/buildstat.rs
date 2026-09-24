@@ -1,14 +1,15 @@
-use std::{os::unix::process::ExitStatusExt, process::Output};
+use std::{collections::HashMap, os::unix::process::ExitStatusExt, process::Output};
 
 use crate::{
     buildsystem::{DataKind, Operation, OperationOutput},
     error::ApplicationError,
 };
+use gftools::stat::StatConfig;
 use google_fonts_axisregistry::build_stat;
 
-#[derive(PartialEq, Debug)]
-pub(crate) struct BuildStat;
+#[derive(PartialEq, Debug, Default)]
 
+pub(crate) struct BuildStat(Option<StatConfig>);
 impl Operation for BuildStat {
     fn shortname(&self) -> &str {
         "BuildStat"
@@ -20,6 +21,12 @@ impl Operation for BuildStat {
 
     fn output_kinds(&self) -> Vec<DataKind> {
         vec![DataKind::Bytes]
+    }
+
+    fn set_extra(&mut self, extra: HashMap<String, serde_json::Value>) {
+        if let Some(config) = extra.get("config") {
+            self.0 = serde_json::from_value(config.clone()).ok();
+        }
     }
 
     fn execute(
