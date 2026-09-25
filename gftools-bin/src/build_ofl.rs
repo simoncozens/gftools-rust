@@ -120,8 +120,10 @@ mod tests {
             out_dir: tmp.path().to_path_buf(),
         })
         .unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Font copyright has Reserved Font Name"));
+        assert!(
+            error
+                .to_string()
+                .contains("Font copyright has Reserved Font Name")
+        );
     }
 }

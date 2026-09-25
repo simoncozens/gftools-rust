@@ -61,7 +61,7 @@ async fn main() {
             .with(chrome_layer)
             .init();
     }
-    let level  = args.verbosity.log_level().unwrap_or(log::Level::Error);
+    let level = args.verbosity.log_level().unwrap_or(log::Level::Error);
     env_logger::Builder::new()
         .filter(None, log::LevelFilter::Warn.min(level.to_level_filter()))
         .filter(Some("skeravar"), log::LevelFilter::Error) // noisy!

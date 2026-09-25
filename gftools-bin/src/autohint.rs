@@ -17,11 +17,11 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use gftools::primary_script;
 use skrifa::FontRef;
-use tilvisan::{autohint, Args as AutohinterArgs, ScriptClassIndex};
+use tilvisan::{Args as AutohinterArgs, ScriptClassIndex, autohint};
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]

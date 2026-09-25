@@ -6,7 +6,7 @@ use crate::{
 };
 use gftools::primary_script;
 use skrifa::FontRef;
-use tilvisan::{autohint, Args, ScriptClassIndex};
+use tilvisan::{Args, ScriptClassIndex, autohint};
 
 #[derive(PartialEq, Debug, Default)]
 pub(crate) struct Autohint {

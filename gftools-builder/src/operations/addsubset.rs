@@ -5,7 +5,7 @@ use crate::{
     error::ApplicationError,
 };
 use babelfont::Font;
-use fontmerge::{fontmerge, DuplicateLookupHandling};
+use fontmerge::{DuplicateLookupHandling, fontmerge};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
