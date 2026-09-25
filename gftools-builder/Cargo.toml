@@ -23,7 +23,7 @@ dashmap = { workspace = true }
 env_logger = { workspace = true }
 fontc = { workspace = true }
 skeravar = { workspace = true }
-read-fonts = { workspace = true }
+skrifa = { workspace = true }
 futures = { workspace = true }
 google-fonts-axisregistry = { workspace = true, features = ["fontations"] }
 log = { workspace = true }
@@ -38,7 +38,12 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 tracing-log = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["fmt", "json", "ansi", "env-filter"] }
+tracing-subscriber = { workspace = true, features = [
+    "fmt",
+    "json",
+    "ansi",
+    "env-filter",
+] }
 tracing-appender = { workspace = true }
 
 layout-rs = { workspace = true, optional = true }
@@ -52,7 +57,7 @@ clap-verbosity-flag = { workspace = true }
 gftools = { workspace = true }
 babelfont = { workspace = true }
 fontmerge = { workspace = true }
-dirs = { workspace = true }                                                                    # For temporary storage of donor fonts when including subsets
+dirs = { workspace = true }                                     # For temporary storage of donor fonts when including subsets
 google-fonts-glyphsets = { workspace = true }
 reqwest = { workspace = true, features = ["blocking", "json"] }
 zip = { workspace = true }

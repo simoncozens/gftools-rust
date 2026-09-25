@@ -4,22 +4,28 @@ use crate::{
     buildsystem::{DataKind, Operation, OperationOutput},
     error::ApplicationError,
 };
-use tilvisan::{Args, autohint};
+use gftools::primary_script;
+use skrifa::FontRef;
+use tilvisan::{autohint, Args, ScriptClassIndex};
 
 #[derive(PartialEq, Debug, Default)]
 pub(crate) struct Autohint {
-    fail_ok: bool,
+    args: Option<String>,
 }
 
 impl Autohint {
     pub fn new() -> Self {
-        Autohint { fail_ok: false }
+        Autohint { args: None }
     }
 }
 
 impl Operation for Autohint {
     fn shortname(&self) -> &str {
         "Autohint"
+    }
+
+    fn set_args(&mut self, args: Option<String>) {
+        self.args = args;
     }
 
     fn input_kinds(&self) -> Vec<DataKind> {
@@ -37,16 +43,40 @@ impl Operation for Autohint {
     ) -> Result<Output, ApplicationError> {
         assert!(inputs.len() == outputs.len());
         let font_filename = inputs[0].to_filename(Some(".ttf"))?;
-        let args = Args {
+        let mut args = Args {
             input: font_filename.clone(),
             ..Default::default()
         };
+        let our_args = self.args.as_ref().unwrap_or(&"".to_string()).to_string();
+        if our_args.contains("--auto-script") {
+            let font_bytes = inputs[0].to_bytes()?;
+            let fontref = FontRef::new(&font_bytes)?;
+            if let Some(script) = primary_script(&fontref, our_args.contains("--discount-latin")) {
+                let maybe_script = ScriptClassIndex::from_tag(&script.to_ascii_lowercase());
+                if maybe_script.is_err() && our_args.contains("--fail-ok") {
+                    log::info!(
+                        "Unknown script {} for autohinting, but fail-ok is set, continuing.",
+                        script
+                    );
+                    // Get out now
+                    outputs[0].set_contents(std::fs::read(&font_filename)?)?;
+                    return Ok(Output {
+                        status: std::process::ExitStatus::from_raw(0),
+                        stdout: vec![],
+                        stderr: vec![],
+                    });
+                }
+                args.default_script = maybe_script.map_err(|e| {
+                    ApplicationError::Other(format!("Unknown script for autohinting: {}", e))
+                })?;
+            }
+        }
         match autohint(&args) {
             Ok(hinted_font) => {
                 outputs[0].set_contents(hinted_font)?;
             }
-            Err(e) if self.fail_ok => {
-                log::info!("Autohinting failed but fail_ok is set, continuing: {}", e);
+            Err(e) if our_args.contains("fail-ok") => {
+                log::info!("Autohinting failed but fail-ok is set, continuing: {}", e);
                 outputs[0].set_contents(std::fs::read(&font_filename)?)?;
             }
             Err(e) => {
@@ -65,11 +95,5 @@ impl Operation for Autohint {
 
     fn description(&self) -> String {
         "Autohint".to_string()
-    }
-
-    fn set_args(&mut self, args: Option<String>) {
-        if args.is_some_and(|a| a.contains("fail-ok")) {
-            self.fail_ok = true;
-        }
     }
 }

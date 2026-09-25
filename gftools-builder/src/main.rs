@@ -14,7 +14,7 @@ use tracing_subscriber::{EnvFilter, prelude::*};
 struct Args {
     /// Increase logging
     #[command(flatten)]
-    verbosity: clap_verbosity_flag::Verbosity,
+    verbosity: clap_verbosity_flag::Verbosity<clap_verbosity_flag::ErrorLevel>,
     /// Generate the recipe and dump as YAML but do not build
     #[clap(long)]
     pub generate: bool,
@@ -61,8 +61,12 @@ async fn main() {
             .with(chrome_layer)
             .init();
     }
+    let level  = args.verbosity.log_level().unwrap_or(log::Level::Error);
     env_logger::Builder::new()
-        .filter_level(args.verbosity.into())
+        .filter(None, log::LevelFilter::Warn.min(level.to_level_filter()))
+        .filter(Some("skeravar"), log::LevelFilter::Error) // noisy!
+        .filter(Some("glyphs_reader"), log::LevelFilter::Error) // noisy!
+        .filter(Some("gftools_builder"), level.to_level_filter())
         .init();
 
     let job_limit = args.jobs.unwrap_or_else(num_cpus::get);
@@ -76,7 +80,7 @@ async fn main() {
         draw_graph: args.graph,
         ascii_graph: args.ascii_graph,
         debug_intermediates: args.debug,
-        verbosity: args.verbosity.log_level().unwrap_or(log::Level::Info),
+        verbosity: level,
         progress: !args.no_progress,
     };
 

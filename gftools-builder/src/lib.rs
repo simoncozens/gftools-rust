@@ -165,7 +165,7 @@ pub async fn build(config: BuildConfig) -> Result<(), ApplicationError> {
     graph.ensure_directories()?;
 
     // Run the build
-    buildsystem::run(graph, config.job_limit, config.progress).await?;
+    buildsystem::run(graph, config.job_limit, config.progress, config.verbosity).await?;
 
     Ok(())
 }

@@ -252,7 +252,7 @@ impl NotoProvider {
             hinted_target,
             base_builder
                 .clone()
-                .autohint(Some("--fail-ok".to_string()))
+                .autohint(Some("--fail-ok --auto-script --discount-latin".to_string()))
                 .build(),
         );
 
@@ -272,7 +272,7 @@ impl NotoProvider {
                 full_target,
                 full_builder
                     .clone()
-                    .autohint(Some("--fail-ok".to_string()))
+                    .autohint(Some("--fail-ok --auto-script --discount-latin".to_string()))
                     .build(),
             );
 
@@ -281,7 +281,8 @@ impl NotoProvider {
                 // Only build statics for GF if we don't have a variable
                 let googlefonts_target =
                     Self::static_target(&familyname_path, "googlefonts", &instancebase);
-                let mut gf_builder = full_builder.autohint(Some("--fail-ok".to_string()));
+                let mut gf_builder = full_builder
+                    .autohint(Some("--fail-ok --auto-script --discount-latin".to_string()));
                 gf_builder = gf_builder.fix(&self.options.fix_config);
                 recipe.insert(googlefonts_target, gf_builder.build());
             }
@@ -289,7 +290,8 @@ impl NotoProvider {
             // Googlefonts static without subset: compile + instance + autohint + fix
             let googlefonts_target =
                 Self::static_target(&familyname_path, "googlefonts", &instancebase);
-            let mut gf_builder = base_builder.autohint(Some("--fail-ok".to_string()));
+            let mut gf_builder =
+                base_builder.autohint(Some("--fail-ok --auto-script --discount-latin".to_string()));
             gf_builder = gf_builder.fix(&self.options.fix_config);
             recipe.insert(googlefonts_target, gf_builder.build());
         }

@@ -5,7 +5,7 @@ use crate::{
     error::ApplicationError,
 };
 use babelfont::Font;
-use fontmerge::fontmerge;
+use fontmerge::{fontmerge, DuplicateLookupHandling};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -165,7 +165,9 @@ impl Operation for AddSubset {
             *donor_font,
             filter,
             self.config.layout_handling,
-            true,
+            DuplicateLookupHandling::Both,
+            false, // Generally speaking we don't want avar merges
+            true,  // We want dotted circle handling
         )
         .map_err(|e| ApplicationError::Other(format!("Font merge failed: {}", e)))?;
         outputs[0].set_font_source(Box::new(output_font))?;

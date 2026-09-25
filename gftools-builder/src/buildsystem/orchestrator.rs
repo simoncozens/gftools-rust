@@ -11,6 +11,7 @@ use async_recursion::async_recursion;
 use dashmap::DashMap;
 use futures::future::{FutureExt, Shared, try_join_all};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use log::Level;
 use petgraph::{
     Direction,
     graph::{EdgeIndex, EdgeReference, NodeIndex},
@@ -112,6 +113,7 @@ pub async fn run(
     graph: BuildGraph,
     job_limit: usize,
     progress: bool,
+    verbosity: Level,
 ) -> Result<(), ApplicationError> {
     let target_count = graph.target_nodes.len();
     let progress_mode = select_progress_mode(progress, target_count);
@@ -122,6 +124,7 @@ pub async fn run(
         progress,
         progress_mode,
         target_count,
+        verbosity,
     ));
     let mut target_futures = Vec::with_capacity(target_count);
 
@@ -371,6 +374,7 @@ pub struct Context {
     aggregate_progress_bar: Option<indicatif::ProgressBar>,
     pub progress_bar_for_target: DashMap<NodeIndex, indicatif::ProgressBar>,
     pub edges_to_final_target_nodes: DashMap<EdgeIndex, Vec<NodeIndex>>,
+    pub verbosity: Level,
 }
 
 impl Context {
@@ -380,6 +384,7 @@ impl Context {
         progress: bool,
         progress_mode: ProgressMode,
         total_targets: usize,
+        verbosity: Level,
     ) -> Self {
         let progressbars = MultiProgress::new();
         let aggregate_progress_bar = if matches!(progress_mode, ProgressMode::Aggregate) {
@@ -410,6 +415,7 @@ impl Context {
             aggregate_progress_bar,
             progress_bar_for_target: DashMap::new(),
             edges_to_final_target_nodes: DashMap::new(),
+            verbosity,
         }
     }
 
@@ -498,6 +504,9 @@ impl Context {
     }
 
     pub async fn print_description(&self, description: &str) {
+        if self.verbosity < Level::Warn {
+            return;
+        }
         if self.progress {
             let _ = self.progressbars.println(description);
         } else {
