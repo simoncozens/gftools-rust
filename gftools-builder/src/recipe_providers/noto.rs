@@ -4,9 +4,9 @@ use babelfont::{Font, Instance, UserLocation};
 
 use crate::{
     error::ApplicationError,
-    operations::{ConfigOperationBuilder, OpStep, addsubset::AddSubsetConfig, fix::FixConfig},
+    operations::{addsubset::AddSubsetConfig, fix::FixConfig, ConfigOperationBuilder, OpStep},
     recipe::{Provider, Recipe, Step},
-    recipe_providers::googlefonts::{GoogleFontsOptions, instance_user_location},
+    recipe_providers::googlefonts::{instance_user_location, GoogleFontsOptions},
 };
 
 pub type NotoOptions = GoogleFontsOptions; // They're the same these days
@@ -201,20 +201,35 @@ impl NotoProvider {
             })?
             .to_string_lossy()
             .to_string();
+        // In python, we use the basename of the instance filename. i.e.
+        // <instance name="Noto Sans Mongolian Regular"
+        //           familyname="Noto Sans Mongolian"
+        //           stylename="Regular"
+        //           filename="instance_ufo/NotoSansMongolian-Regular.ufo" ...>
+        // becomes NotoSansMongolian-Regular(.ttf)
+        // Which is fine because in Python, we always convert to Designspace first and this
+        // generates a filename for us. Here we don't work from DS, and our babelfont Instance
+        // objects don't have a filename attribute.
 
-        let instancebase = format!(
-            "{}-{}",
-            source
-                .names
-                .family_name
-                .get_default()
-                .unwrap_or(&"Unknown".to_string()),
-            instance
-                .name
-                .get_default()
-                .unwrap_or(&"Regular".to_string())
-        )
-        .replace(" ", "");
+        // If we have a preferred subfamily name (DS), use that, else instance name (Glyphs)
+        let family_name = source
+            .names
+            .family_name
+            .get_default()
+            .map(|x| x.to_string())
+            .unwrap_or("Unknown".to_string());
+        let subfamily = if let Some(preferred_subfamily_name) =
+            instance.custom_names.preferred_subfamily_name.get_default()
+        {
+            preferred_subfamily_name.to_string()
+        } else if let Some(instance_name) = instance.name.get_default_or_fallback() {
+            instance_name
+                .to_string()
+                .replace(&(family_name.to_owned() + " "), "")
+        } else {
+            "Regular".to_string()
+        };
+        let instancebase = format!("{}-{}", family_name, subfamily).replace(" ", "");
 
         let mut base_builder = ConfigOperationBuilder::new().source(source_path.clone());
         base_builder = base_builder.compile(&self.options.fontc_config);
@@ -350,5 +365,100 @@ impl Provider for NotoProvider {
         let have_variables = !provider.recipe.is_empty();
         provider.build_all_statics(have_variables)?;
         Ok(provider.recipe)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::HashSet,
+        path::{Path, PathBuf},
+    };
+
+    use crate::{change_to_config_dir, load_config, ChangeDirGuard};
+    use serial_test::serial;
+
+    fn test_resources_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources")
+    }
+
+    fn assert_keys(config: &Path, expected_keys: &[&str]) {
+        let config_path = config.as_os_str().to_str().unwrap();
+        let expected_keys: HashSet<String> = expected_keys.iter().map(|s| s.to_string()).collect();
+        let config_yaml = load_config(config_path).expect("Failed to load config");
+        let _change_back = ChangeDirGuard::new().expect("Failed to create ChangeDirGuard");
+        change_to_config_dir(config_path).expect("Failed to change to config directory");
+        let recipe = config_yaml.recipe().expect("Failed to generate recipe");
+        let got_keys: HashSet<String> = recipe.0.keys().map(|k| k.to_string()).collect();
+        if got_keys != expected_keys {
+            let missing = expected_keys.difference(&got_keys).collect::<HashSet<_>>();
+            let unexpected = got_keys.difference(&expected_keys).collect::<HashSet<_>>();
+            panic!(
+                "Recipe keys do not match expected keys.\nMissing: {}\nUnexpected: {}",
+                missing
+                    .iter()
+                    .map(|s| format!("  - {}", s))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                unexpected
+                    .iter()
+                    .map(|s| format!("  - {}", s))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            );
+        }
+    }
+    #[test]
+    #[serial]
+    fn test_mongolian() {
+        let config = test_resources_dir().join("mongolian/config-sans-mongolian.yaml");
+        let expected_keys = [
+            "../fonts/NotoSansMongolian/full/ttf/NotoSansMongolian-Regular.ttf",
+            "../fonts/NotoSansMongolian/googlefonts/ttf/NotoSansMongolian-Regular.ttf",
+            "../fonts/NotoSansMongolian/hinted/ttf/NotoSansMongolian-Regular.ttf",
+            "../fonts/NotoSansMongolian/unhinted/ttf/NotoSansMongolian-Regular.ttf",
+        ];
+        assert_keys(&config, &expected_keys);
+    }
+
+    #[test]
+    #[serial]
+    fn test_kufi() {
+        let config = test_resources_dir().join("arabic/config-kufi-arabic.yaml");
+        let expected_keys = [
+            "../fonts/NotoKufiArabic/full/slim-variable-ttf/NotoKufiArabic[wght].ttf",
+            "../fonts/NotoKufiArabic/full/ttf/NotoKufiArabic-Black.ttf",
+            "../fonts/NotoKufiArabic/full/ttf/NotoKufiArabic-Bold.ttf",
+            "../fonts/NotoKufiArabic/full/ttf/NotoKufiArabic-ExtraBold.ttf",
+            "../fonts/NotoKufiArabic/full/ttf/NotoKufiArabic-ExtraLight.ttf",
+            "../fonts/NotoKufiArabic/full/ttf/NotoKufiArabic-Light.ttf",
+            "../fonts/NotoKufiArabic/full/ttf/NotoKufiArabic-Medium.ttf",
+            "../fonts/NotoKufiArabic/full/ttf/NotoKufiArabic-Regular.ttf",
+            "../fonts/NotoKufiArabic/full/ttf/NotoKufiArabic-SemiBold.ttf",
+            "../fonts/NotoKufiArabic/full/ttf/NotoKufiArabic-Thin.ttf",
+            "../fonts/NotoKufiArabic/full/variable-ttf/NotoKufiArabic[wght].ttf",
+            "../fonts/NotoKufiArabic/googlefonts/variable-ttf/NotoKufiArabic[wght].ttf",
+            "../fonts/NotoKufiArabic/hinted/ttf/NotoKufiArabic-Black.ttf",
+            "../fonts/NotoKufiArabic/hinted/ttf/NotoKufiArabic-Bold.ttf",
+            "../fonts/NotoKufiArabic/hinted/ttf/NotoKufiArabic-ExtraBold.ttf",
+            "../fonts/NotoKufiArabic/hinted/ttf/NotoKufiArabic-ExtraLight.ttf",
+            "../fonts/NotoKufiArabic/hinted/ttf/NotoKufiArabic-Light.ttf",
+            "../fonts/NotoKufiArabic/hinted/ttf/NotoKufiArabic-Medium.ttf",
+            "../fonts/NotoKufiArabic/hinted/ttf/NotoKufiArabic-Regular.ttf",
+            "../fonts/NotoKufiArabic/hinted/ttf/NotoKufiArabic-SemiBold.ttf",
+            "../fonts/NotoKufiArabic/hinted/ttf/NotoKufiArabic-Thin.ttf",
+            "../fonts/NotoKufiArabic/unhinted/slim-variable-ttf/NotoKufiArabic[wght].ttf",
+            "../fonts/NotoKufiArabic/unhinted/ttf/NotoKufiArabic-Black.ttf",
+            "../fonts/NotoKufiArabic/unhinted/ttf/NotoKufiArabic-Bold.ttf",
+            "../fonts/NotoKufiArabic/unhinted/ttf/NotoKufiArabic-ExtraBold.ttf",
+            "../fonts/NotoKufiArabic/unhinted/ttf/NotoKufiArabic-ExtraLight.ttf",
+            "../fonts/NotoKufiArabic/unhinted/ttf/NotoKufiArabic-Light.ttf",
+            "../fonts/NotoKufiArabic/unhinted/ttf/NotoKufiArabic-Medium.ttf",
+            "../fonts/NotoKufiArabic/unhinted/ttf/NotoKufiArabic-Regular.ttf",
+            "../fonts/NotoKufiArabic/unhinted/ttf/NotoKufiArabic-SemiBold.ttf",
+            "../fonts/NotoKufiArabic/unhinted/ttf/NotoKufiArabic-Thin.ttf",
+            "../fonts/NotoKufiArabic/unhinted/variable-ttf/NotoKufiArabic[wght].ttf",
+        ];
+        assert_keys(&config, &expected_keys);
     }
 }

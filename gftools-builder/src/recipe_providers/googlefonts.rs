@@ -104,7 +104,6 @@ pub struct GoogleFontsOptions {
     // Options for adding subsets
     #[serde(default)]
     pub include_subsets: Vec<IncludeSubsetsOptions>,
-
     // We don't support STAT table configs for now. This is because inside
     // gftools-builder we don't have access to the final filenames, and we
     // need them...
