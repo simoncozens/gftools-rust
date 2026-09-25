@@ -8,6 +8,10 @@ name = "gftools-add-axis"
 path = "src/add_axis.rs"
 
 [[bin]]
+name = "gftools-build-ofl"
+path = "src/build_ofl.rs"
+
+[[bin]]
 name = "gftools-check-bbox"
 path = "src/check_bbox.rs"
 

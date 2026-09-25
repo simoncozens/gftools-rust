@@ -12,21 +12,21 @@
 use std::collections::HashMap;
 
 use google_fonts_axisregistry::build_stat;
-use serde::{de, Deserialize, Deserializer, Serialize};
-use skrifa::{raw::TableProvider as _, FontRef};
+use serde::{Deserialize, Deserializer, Serialize, de};
+use skrifa::{FontRef, raw::TableProvider as _};
 use write_fonts::{
+    FontBuilder,
     from_obj::ToOwnedTable,
     tables::{
         name::{Name, NameRecord},
         stat as write_stat,
     },
     types::{Fixed, NameId, Tag},
-    FontBuilder,
 };
 
+use crate::GftoolsError;
 use crate::names::find_or_add_name;
 use crate::utils::font_is_italic;
-use crate::GftoolsError;
 
 /// Builder for the STAT table, which contains design axis and axis value information.
 #[derive(Clone, Debug)]
@@ -572,8 +572,8 @@ fn italic_axis(italic: bool) -> AxisConfig {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use skrifa::raw::tables::stat::AxisValue as ReadAxisValue;
     use skrifa::MetadataProvider as _;
+    use skrifa::raw::tables::stat::AxisValue as ReadAxisValue;
 
     const ROBOTO: &str = "resources/test/Roboto[wdth,wght].ttf";
 
@@ -788,9 +788,11 @@ mod tests {
     fn test_config_without_a_value() {
         let config = parse_config("- name: Weight\n  tag: wght\n  values:\n  - name: Nonsense\n");
         let error = StatBuilder::from_config(family_config(&config)).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Can't determine format for AxisValue"));
+        assert!(
+            error
+                .to_string()
+                .contains("Can't determine format for AxisValue")
+        );
     }
 
     #[test]
@@ -823,9 +825,11 @@ Font-Italic[wght].ttf:
             "Italic"
         );
         let error = config.axes_for("Nope.ttf").unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("Filename Nope.ttf not found in stat dictionary"));
+        assert!(
+            error
+                .to_string()
+                .contains("Filename Nope.ttf not found in stat dictionary")
+        );
     }
 
     #[test]
@@ -907,9 +911,11 @@ Font-Italic[wght].ttf:
         let with_ital =
             parse_config("- name: Italic\n  tag: ital\n  values:\n  - name: Roman\n    value: 0\n");
         let error = gen_stat_tables_from_config(&with_ital, &[roboto()], Some(true)).unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("ital axis should not appear in stat config"));
+        assert!(
+            error
+                .to_string()
+                .contains("ital axis should not appear in stat config")
+        );
     }
 
     #[test]

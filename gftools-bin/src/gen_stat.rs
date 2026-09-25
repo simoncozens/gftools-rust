@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use gftools::{gen_stat_tables, gen_stat_tables_from_config, StatConfig, VarFont};
+use gftools::{StatConfig, VarFont, gen_stat_tables, gen_stat_tables_from_config};
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = None)]
@@ -114,8 +114,8 @@ fn file_name(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use skrifa::raw::tables::stat::AxisValue;
     use skrifa::raw::TableProvider as _;
+    use skrifa::raw::tables::stat::AxisValue;
 
     const ROBOTO: &str = "../gftools-lib/resources/test/Roboto[wdth,wght].ttf";
     const CONFIG: &str =

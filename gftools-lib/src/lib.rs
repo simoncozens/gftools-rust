@@ -1,6 +1,7 @@
 mod closure;
 mod error;
 mod fix;
+pub mod license;
 mod names;
 mod overlaps;
 pub mod stat;
