@@ -8,6 +8,10 @@ name = "gftools-add-axis"
 path = "src/add_axis.rs"
 
 [[bin]]
+name = "gftools-autohint"
+path = "src/autohint.rs"
+
+[[bin]]
 name = "gftools-build-ofl"
 path = "src/build_ofl.rs"
 
@@ -141,6 +145,7 @@ glob = "0.3.4"
 csv = "1.4.0"
 serde.workspace = true
 serde_yaml_ng = { workspace = true }
+tilvisan.workspace = true
 
 [dev-dependencies]
 tempfile = { workspace = true }
