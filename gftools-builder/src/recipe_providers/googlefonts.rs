@@ -93,6 +93,9 @@ pub struct GoogleFontsOptions {
     #[serde_inline_default(true)]
     pub remove_overlaps: bool,
 
+    #[serde_inline_default(true)]
+    pub split_italic: bool,
+
     // Fix arguments
     #[serde(flatten, default)]
     pub fix_config: FixConfig,
@@ -161,10 +164,12 @@ impl GoogleFontsOptions {
             .iter()
             .map(|axis| axis.tag.to_string())
             .collect::<Vec<String>>();
+        log::debug!("Initial axis tags: {:?}", tags);
         if let Some(axis_tag) = italic_ds.map(|x| &x.axis_tag) {
             if roman == Style::Italic {
                 sourcebase.push_str("-Italic");
             }
+            log::debug!("Dropping italic axis tag: {:?}", axis_tag);
             tags.retain(|tag| tag != axis_tag);
         }
 
@@ -360,8 +365,14 @@ impl GoogleFontsProvider {
         if !self.options.build_static {
             return Ok(());
         }
+        if !self.options.build_ttf {
+            return Ok(());
+        } // We don't support turning off OTFs (because we don't make OTFs), so turning off TTF is equivalent to turning off static
         for source in self.sources.iter() {
             for instance in source.instances.iter() {
+                if instance.variable {
+                    continue;
+                }
                 let recipe = if source.masters.len() > 1 && self.options.build_variable {
                     self.instantiate_a_static(source, instance, FontFormat::TTF)?
                 } else {
@@ -382,7 +393,6 @@ impl GoogleFontsProvider {
                         .into(),
                     ..Default::default()
                 };
-                println!("Font names: {:?}", source.names);
                 let recipe = self.build_a_static(source, &default_instance, FontFormat::TTF)?;
                 self.recipe.extend(recipe);
             }
@@ -390,6 +400,38 @@ impl GoogleFontsProvider {
         Ok(())
     }
 
+    fn instance_base_filename(
+        &self,
+        source: &Font,
+        instance: &Instance,
+        _format: FontFormat,
+    ) -> Result<String, ApplicationError> {
+        let instance_family_name =
+            if let Some(family_name) = instance.custom_names.family_name.get_default() {
+                family_name.to_string()
+            } else {
+                source
+                    .names
+                    .family_name
+                    .get_default_or_fallback()
+                    .map(|x| x.to_string())
+                    .unwrap_or("Unknown".to_string())
+            };
+        let subfamily = if let Some(preferred_subfamily_name) =
+            instance.custom_names.preferred_subfamily_name.get_default()
+        {
+            preferred_subfamily_name.to_string()
+        } else if let Some(instance_name) = instance.name.get_default_or_fallback() {
+            instance_name
+                .to_string()
+                .replace(&(instance_family_name.to_owned() + " "), "")
+        } else {
+            "Regular".to_string()
+        };
+
+        let instance_base = format!("{}-{}", instance_family_name, subfamily).replace(" ", "");
+        Ok(instance_base)
+    }
     fn instantiate_a_static(
         &self,
         source: &Font,
@@ -405,24 +447,13 @@ impl GoogleFontsProvider {
                 .unwrap_or(&"Unknown family".to_string()),
             instance.location
         );
-        let instance_base = format!(
-            "{}-{}",
-            source
-                .names
-                .family_name
-                .get_default()
-                .unwrap_or(&"Unknown".to_string()),
-            instance
-                .name
-                .get_default()
-                .unwrap_or(&"Regular".to_string())
-        )
-        .replace(" ", "");
+        let instance_base = self.instance_base_filename(source, instance, format)?;
         let target = self.options.static_filename(
             &instance_base,
             self.options.filename_suffix.as_deref(),
             Some(format.extension()),
         );
+
         log::debug!("Static target filename: {}", target);
         let mut recipe = Recipe::new();
         let vf_filename = self.vf_source_for_instance(source, instance)?;
@@ -465,7 +496,7 @@ impl GoogleFontsProvider {
             source
                 .names
                 .family_name
-                .get_default()
+                .get_default_or_fallback()
                 .unwrap_or(&"Unknown family".to_string())
         );
         let mut recipe = Recipe::new();
@@ -522,29 +553,18 @@ impl GoogleFontsProvider {
         &self,
         source: &Font,
         instance: &Instance,
-        _format: FontFormat,
+        format: FontFormat,
     ) -> Result<Recipe, ApplicationError> {
         log::debug!(
             "Considering how to build static font from single master source {}",
             source
                 .names
                 .family_name
-                .get_default()
+                .get_default_or_fallback()
                 .unwrap_or(&"Unknown family".to_string())
         );
         let mut recipe = Recipe::new();
-        let family_name = source
-            .names
-            .family_name
-            .get_default()
-            .unwrap_or(&"Unknown".to_string())
-            .replace(" ", "");
-        let style_name = instance
-            .name
-            .get_default()
-            .unwrap_or(&"Regular".to_string())
-            .replace(" ", "");
-        let instance_base = format!("{}-{}", family_name, style_name);
+        let instance_base = self.instance_base_filename(source, instance, format)?;
 
         let target = self.options.static_filename(
             &instance_base,
@@ -592,6 +612,9 @@ impl GoogleFontsProvider {
     }
 
     fn has_slant_italic(&self, source: &Font) -> Option<ItalicDescriptor> {
+        if !self.options.split_italic {
+            return None;
+        }
         for axis in &source.axes {
             if axis.tag == "ital"
                 && let Some((_min, _, max)) = axis.bounds()
