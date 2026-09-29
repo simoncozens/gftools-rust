@@ -1,7 +1,11 @@
 [package]
 name = "gftools"
+description = "Font manipulation library used by Google Fonts"
 version = "0.1.0-alpha"
-edition = "2024"
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
 
 [dependencies]
 skrifa = { workspace = true }
