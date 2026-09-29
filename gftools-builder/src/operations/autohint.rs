@@ -1,4 +1,4 @@
-use std::{os::unix::process::ExitStatusExt, process::Output};
+use std::process::Output;
 
 use crate::{
     buildsystem::{DataKind, Operation, OperationOutput},
@@ -61,7 +61,7 @@ impl Operation for Autohint {
                     // Get out now
                     outputs[0].set_contents(std::fs::read(&font_filename)?)?;
                     return Ok(Output {
-                        status: std::process::ExitStatus::from_raw(0),
+                        status: std::process::ExitStatus::default(),
                         stdout: vec![],
                         stderr: vec![],
                     });
@@ -87,7 +87,7 @@ impl Operation for Autohint {
             }
         }
         Ok(Output {
-            status: std::process::ExitStatus::from_raw(0),
+            status: std::process::ExitStatus::default(),
             stdout: vec![],
             stderr: vec![],
         })

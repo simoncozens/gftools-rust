@@ -1,7 +1,4 @@
-use std::{
-    os::unix::process::ExitStatusExt as _,
-    process::{ExitStatus, Output},
-};
+use std::process::{ExitStatus, Output};
 
 use async_trait::async_trait;
 
@@ -41,7 +38,7 @@ impl Operation for FileToBytes {
             .ok_or_else(|| ApplicationError::WrongOutputs("Missing output slot 0".into()))?
             .set_bytes(bytes)?;
         Ok(Output {
-            status: ExitStatus::from_raw(0),
+            status: ExitStatus::default(),
             stdout: vec![],
             stderr: vec![],
         })
@@ -87,7 +84,7 @@ impl Operation for BytesToTempFile {
             .map_err(|e| ApplicationError::Other(format!("Failed to write temp file: {}", e)))?;
 
         Ok(Output {
-            status: ExitStatus::from_raw(0),
+            status: ExitStatus::default(),
             stdout: vec![],
             stderr: vec![],
         })
@@ -128,7 +125,7 @@ impl Operation for PathToSourceFont {
             .ok_or_else(|| ApplicationError::WrongOutputs("Missing output slot 0".into()))?
             .set_font_source(font)?;
         Ok(Output {
-            status: ExitStatus::from_raw(0),
+            status: ExitStatus::default(),
             stdout: vec![],
             stderr: vec![],
         })

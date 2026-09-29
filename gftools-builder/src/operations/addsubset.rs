@@ -1,4 +1,4 @@
-use std::{collections::HashMap, os::unix::process::ExitStatusExt, process::Output};
+use std::{collections::HashMap, process::Output};
 
 use crate::{
     buildsystem::{DataKind, Operation, OperationOutput},
@@ -172,7 +172,7 @@ impl Operation for AddSubset {
         .map_err(|e| ApplicationError::Other(format!("Font merge failed: {}", e)))?;
         outputs[0].set_font_source(Box::new(output_font))?;
         Ok(Output {
-            status: std::process::ExitStatus::from_raw(0),
+            status: std::process::ExitStatus::default(),
             stdout: vec![],
             stderr: vec![],
         })

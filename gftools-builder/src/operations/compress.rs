@@ -1,7 +1,4 @@
-use std::{
-    os::unix::process::ExitStatusExt,
-    process::{ExitStatus, Output},
-};
+use std::process::{ExitStatus, Output};
 
 use tracing::info_span;
 use ttf2woff2::{BrotliQuality, encode};
@@ -41,7 +38,7 @@ impl Operation for Compress {
         let compressed = encode(&ttf_data, BrotliQuality::default())?;
         outputs[0].set_contents(compressed)?;
         Ok(Output {
-            status: ExitStatus::from_raw(0),
+            status: ExitStatus::default(),
             stdout: vec![],
             stderr: vec![],
         })

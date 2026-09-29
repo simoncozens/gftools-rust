@@ -1,7 +1,4 @@
-use std::{
-    os::unix::process::ExitStatusExt,
-    process::{ExitStatus, Output},
-};
+use std::process::{ExitStatus, Output};
 
 use gftools::remove_overlaps;
 use tracing::info_span;
@@ -42,7 +39,7 @@ impl Operation for RemoveOverlaps {
             .map_err(|e| ApplicationError::RemoveOverlapsError(e.to_string()))?;
         outputs[0].set_contents(processed)?;
         Ok(Output {
-            status: ExitStatus::from_raw(0),
+            status: ExitStatus::default(),
             stdout: vec![],
             stderr: vec![],
         })

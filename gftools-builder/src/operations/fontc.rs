@@ -2,7 +2,6 @@ use serde_inline_default::serde_inline_default;
 use serde_json::Value;
 use std::{
     collections::HashMap,
-    os::unix::process::ExitStatusExt,
     path::PathBuf,
     process::{ExitStatus, Output},
 };
@@ -109,7 +108,7 @@ impl Operation for Fontc {
             .map_err(|e| ApplicationError::Other(e.to_string()))?;
         outputs[0].set_contents(font)?;
         Ok(Output {
-            status: ExitStatus::from_raw(0),
+            status: ExitStatus::default(),
             stdout: vec![],
             stderr: vec![],
         })

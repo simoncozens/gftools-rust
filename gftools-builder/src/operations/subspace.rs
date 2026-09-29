@@ -3,7 +3,7 @@ use crate::{
     error::ApplicationError,
 };
 use skeravar::{FontRef, GlyphId, IntSet, Plan, parse_instancing_spec, subset_font};
-use std::{os::unix::process::ExitStatusExt, process::Output};
+use std::process::Output;
 use tracing::info_span;
 
 #[derive(PartialEq, Debug)]
@@ -60,7 +60,7 @@ impl Operation for Subspace {
             Ok(bytes) => {
                 outputs[0].set_contents(bytes)?;
                 Ok(Output {
-                    status: std::process::ExitStatus::from_raw(0),
+                    status: std::process::ExitStatus::default(),
                     stdout: Vec::new(),
                     stderr: Vec::new(),
                 })

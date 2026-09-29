@@ -1,4 +1,4 @@
-use std::{os::unix::process::ExitStatusExt as _, process::Output};
+use std::process::Output;
 
 use babelfont::{
     DesignCoord, DesignLocation, Tag,
@@ -69,7 +69,7 @@ impl Operation for InstantiateSource {
             .map_err(|e| ApplicationError::Other(format!("Failed to drop variations: {}", e)))?;
         outputs[0].set_font_source(output_font)?;
         Ok(Output {
-            status: std::process::ExitStatus::from_raw(0),
+            status: std::process::ExitStatus::default(),
             stdout: vec![],
             stderr: vec![],
         })

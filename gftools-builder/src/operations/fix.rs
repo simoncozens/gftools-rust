@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, os::unix::process::ExitStatusExt};
+use std::collections::HashMap;
 use tracing::info_span;
 
 use crate::{
@@ -65,7 +65,7 @@ impl Operation for Fix {
             FixFvarTable::Yes,
         ) {
             Ok(()) => Ok(Output {
-                status: std::process::ExitStatus::from_raw(0),
+                status: std::process::ExitStatus::default(),
                 stdout: Vec::new(),
                 stderr: Vec::new(),
             }),

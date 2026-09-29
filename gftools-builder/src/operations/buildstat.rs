@@ -1,4 +1,4 @@
-use std::{collections::HashMap, os::unix::process::ExitStatusExt, process::Output};
+use std::{collections::HashMap, process::Output};
 
 use crate::{
     buildsystem::{DataKind, Operation, OperationOutput},
@@ -57,7 +57,7 @@ impl Operation for BuildStat {
             outputs[index].set_contents(with_stat)?;
         }
         Ok(Output {
-            status: std::process::ExitStatus::from_raw(0),
+            status: std::process::ExitStatus::default(),
             stdout: vec![],
             stderr: vec![],
         })
