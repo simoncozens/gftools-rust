@@ -82,6 +82,7 @@ impl Family {
         let font = skrifa::FontRef::new(&contents)?;
         Ok(Self::from_fontref(font))
     }
+    #[allow(dead_code)]
     pub(crate) async fn from_googlefonts_json(
         data: Value,
         url: &str,
@@ -376,6 +377,7 @@ impl FamilyMeta {
         })
     }
 
+    #[allow(dead_code)]
     pub(crate) fn from_googlefonts_json(s: &str) -> Result<Self, GftoolsError> {
         serde_json::from_str(s)
             .map_err(|e| GftoolsError::Misc(format!("Failed to parse JSON: {}", e)))
@@ -403,6 +405,7 @@ impl Designer {
             bio: bio.unwrap_or_default(),
         })
     }
+    #[allow(dead_code)]
     pub(crate) fn from_googlefonts_json(data: Value, _url: &str) -> Result<Self, GftoolsError> {
         Ok(Self {
             name: data["name"]

@@ -51,7 +51,7 @@ fn main() {
     }
     let chosen_axis: Axis = choose_axis(&axes, &font);
     println!("Chosen axis: {}", chosen_axis.tag());
-    let axis_name = font
+    let _axis_name = font
         .localized_strings(chosen_axis.name_id())
         .english_or_first()
         .map(|x| x.to_string())

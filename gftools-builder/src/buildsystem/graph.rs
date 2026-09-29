@@ -206,11 +206,11 @@ impl BuildGraph {
                         .graph
                         .edges_directed(current_node, petgraph::Direction::Outgoing)
                         .find(|edge| {
-                            if let Some(node_op) = self.graph.node_weight(edge.target()) {
-                                if node_op.shortname() == conv_op.shortname() {
-                                    return !started_at_source
-                                        || edge.weight().output.value_eq(&computed_output);
-                                }
+                            if let Some(node_op) = self.graph.node_weight(edge.target())
+                                && node_op.shortname() == conv_op.shortname()
+                            {
+                                return !started_at_source
+                                    || edge.weight().output.value_eq(&computed_output);
                             }
                             false
                         })
@@ -433,12 +433,10 @@ impl BuildGraph {
                 // Check if this edge goes to a Sink node AND has the matching target output
                 if let Some(node_weight) = self.graph.node_weight(edge.target())
                     && node_weight.shortname() == "Sink"
+                    && let Ok(output) = edge.weight().output.lock()
+                    && let RawOperationOutput::NamedFile(filename) = &*output
                 {
-                    if let Ok(output) = edge.weight().output.lock()
-                        && let RawOperationOutput::NamedFile(filename) = &*output
-                    {
-                        return filename == target_name;
-                    }
+                    return filename == target_name;
                 }
                 false
             })
