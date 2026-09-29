@@ -19,17 +19,19 @@ use tracing::info_span;
 #[serde_inline_default]
 #[serde(rename_all = "camelCase")]
 pub struct FontcConfig {
-    #[serde(default)]
+    // For some reason, serde_inline_default inside a nested (flattened)
+    // struct doesn't provide defaults and you get missing field errors
+    #[serde(default = "default_to_true")]
     pub flatten_components: bool,
 
-    #[serde(default)]
+    #[serde(default = "default_to_true")]
     pub decompose_transformed_components: bool,
 
-    #[serde(default = "default_reverse_outline_direction")]
+    #[serde(default = "default_to_true")]
     pub reverse_outline_direction: bool,
 }
 
-fn default_reverse_outline_direction() -> bool {
+fn default_to_true() -> bool {
     true
 }
 
