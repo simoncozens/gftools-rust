@@ -8,14 +8,14 @@ members = [
 resolver = "3"
 
 [workspace.dependencies]
-fontspector-hotfix = { git = "https://github.com/fonttools/fontspector", default-features = false, features = [
+babelfont = { version = "0.2.2" }
+fontspector-hotfix = { version = "0.5.0", git = "https://github.com/fonttools/fontspector", default-features = false, features = [
     "profiles",
 ] }
 anyhow = "1.0.104"
 ascii-dag = "0.4.0"
 async-recursion = "1"
 async-trait = "0.1.88"
-babelfont = { version = "0.2.1", git = "https://github.com/simoncozens/babelfont-rs" }
 clap = "4.5.45"
 clap-verbosity-flag = "3.0.4"
 dashmap = "6.1.0"
@@ -24,7 +24,7 @@ env_logger = "0.11.8"
 expanduser = "1.2.2"
 fontc = "1.0.0"
 fontdrasil = "1.0.0"
-fontmerge = { version = "0.2.0", git = "https://github.com/simoncozens/babelfont-rs" }
+fontmerge = { version = "0.2.0" }
 futures = "0.3"
 gf-metadata = "0.2.0"
 google-fonts-axisregistry = "0.5.0"

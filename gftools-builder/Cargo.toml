@@ -2,8 +2,8 @@
 name = "gftools-builder"
 description = "A tool to build and fix fonts for Google Fonts"
 authors = ["Simon Cozens <simon@simon-cozens.org>"]
-repository = "https://github.com/simoncozens/gftools-builder3"
-version = "3.0.0"
+repository = "https://github.com/simoncozens/gftools-rust"
+version = "3.0.0-alpha"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = true
