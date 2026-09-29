@@ -78,3 +78,8 @@ chrono = "0.4.45"
 scraper = "0.23.1"
 gix = "0.87.1"
 gix-refspec = "0.45.1"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
