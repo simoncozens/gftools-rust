@@ -1,4 +1,5 @@
 use crate::recipe_providers::includesubsets::IncludeSubsetsOptions;
+use crate::recipe_providers::staticnames;
 use babelfont::{Font, Instance, UserCoord, UserLocation};
 use serde::{Deserialize, Serialize};
 use serde_inline_default::serde_inline_default;
@@ -87,8 +88,10 @@ pub struct GoogleFontsOptions {
     #[serde(rename = "buildTTF")]
     pub build_ttf: bool,
 
-    #[serde_inline_default(true)]
-    pub build_webfont: bool,
+    // Whether to build webfonts. When unset, it follows `build_static`; see
+    // `GoogleFontsOptions::build_webfont`.
+    #[serde(default)]
+    pub build_webfont: Option<bool>,
 
     #[serde_inline_default(true)]
     pub remove_overlaps: bool,
@@ -124,6 +127,13 @@ impl Default for GoogleFontsOptions {
 }
 
 impl GoogleFontsOptions {
+    /// Resolve `buildWebfont`. An explicit setting wins; otherwise it follows
+    /// `buildStatic`, mirroring the Python builder's
+    /// `config.get("buildWebfont", config.get("buildStatic", True))`.
+    fn build_webfont(&self) -> bool {
+        self.build_webfont.unwrap_or(self.build_static)
+    }
+
     fn vf_dir(&self) -> String {
         self.vf_dir.replace("$outputDir", &self.output_dir)
     }
@@ -370,68 +380,26 @@ impl GoogleFontsProvider {
         } // We don't support turning off OTFs (because we don't make OTFs), so turning off TTF is equivalent to turning off static
         for source in self.sources.iter() {
             for instance in source.instances.iter() {
-                if instance.variable {
+                if !staticnames::should_build_static(instance) {
                     continue;
                 }
                 let recipe = if source.masters.len() > 1 && self.options.build_variable {
                     self.instantiate_a_static(source, instance, FontFormat::TTF)?
                 } else {
-                    self.build_a_static(source, instance, FontFormat::TTF)?
+                    self.build_a_static(source, instance)?
                 };
                 self.recipe.extend(recipe);
             }
             // If there are no instances, build at default
             if source.instances.is_empty() {
-                let default_instance = Instance {
-                    // Try in order: Preferred Subfamily Name, Style Name, styleMapStyleName "Regular"
-                    name: source
-                        .names
-                        .preferred_subfamily_name
-                        .get_default()
-                        .or_else(|| source.names.wws_subfamily_name.get_default())
-                        .unwrap_or(&"Regular".to_string())
-                        .into(),
-                    ..Default::default()
-                };
-                let recipe = self.build_a_static(source, &default_instance, FontFormat::TTF)?;
+                let default_instance = staticnames::default_instance(source);
+                let recipe = self.build_a_static(source, &default_instance)?;
                 self.recipe.extend(recipe);
             }
         }
         Ok(())
     }
 
-    fn instance_base_filename(
-        &self,
-        source: &Font,
-        instance: &Instance,
-        _format: FontFormat,
-    ) -> Result<String, ApplicationError> {
-        let instance_family_name =
-            if let Some(family_name) = instance.custom_names.family_name.get_default() {
-                family_name.to_string()
-            } else {
-                source
-                    .names
-                    .family_name
-                    .get_default_or_fallback()
-                    .map(|x| x.to_string())
-                    .unwrap_or("Unknown".to_string())
-            };
-        let subfamily = if let Some(preferred_subfamily_name) =
-            instance.custom_names.preferred_subfamily_name.get_default()
-        {
-            preferred_subfamily_name.to_string()
-        } else if let Some(instance_name) = instance.name.get_default_or_fallback() {
-            instance_name
-                .to_string()
-                .replace(&(instance_family_name.to_owned() + " "), "")
-        } else {
-            "Regular".to_string()
-        };
-
-        let instance_base = format!("{}-{}", instance_family_name, subfamily).replace(" ", "");
-        Ok(instance_base)
-    }
     fn instantiate_a_static(
         &self,
         source: &Font,
@@ -447,7 +415,8 @@ impl GoogleFontsProvider {
                 .unwrap_or(&"Unknown family".to_string()),
             instance.location
         );
-        let instance_base = self.instance_base_filename(source, instance, format)?;
+        // The naming rules are shared with the Noto provider; see `staticnames`.
+        let instance_base = staticnames::static_base_name(source, instance);
         let target = self.options.static_filename(
             &instance_base,
             self.options.filename_suffix.as_deref(),
@@ -469,7 +438,7 @@ impl GoogleFontsProvider {
         // VTT steps
         builder = builder.fix(&self.options.fix_config);
 
-        if self.options.build_webfont && format == FontFormat::TTF {
+        if self.options.build_webfont() && format == FontFormat::TTF {
             let webfont_target = self.options.static_filename(
                 &instance_base,
                 self.options.filename_suffix.as_deref(),
@@ -530,7 +499,7 @@ impl GoogleFontsProvider {
             // builder = builder.buildstat(&siblings, &self.options.stat_config);
         }
 
-        if self.options.build_webfont {
+        if self.options.build_webfont() {
             let webfont_target = self.options.vf_filename(
                 source,
                 self.options.filename_suffix.as_deref(),
@@ -553,7 +522,6 @@ impl GoogleFontsProvider {
         &self,
         source: &Font,
         instance: &Instance,
-        format: FontFormat,
     ) -> Result<Recipe, ApplicationError> {
         log::debug!(
             "Considering how to build static font from single master source {}",
@@ -564,7 +532,7 @@ impl GoogleFontsProvider {
                 .unwrap_or(&"Unknown family".to_string())
         );
         let mut recipe = Recipe::new();
-        let instance_base = self.instance_base_filename(source, instance, format)?;
+        let instance_base = staticnames::static_base_name(source, instance);
 
         let target = self.options.static_filename(
             &instance_base,
@@ -594,7 +562,7 @@ impl GoogleFontsProvider {
         // If italic, subspace the axes according to style
 
         builder = builder.fix(&self.options.fix_config);
-        if self.options.build_webfont {
+        if self.options.build_webfont() {
             let webfont_target = self.options.static_filename(
                 &instance_base,
                 self.options.filename_suffix.as_deref(),

@@ -6,7 +6,10 @@ use crate::{
     error::ApplicationError,
     operations::{ConfigOperationBuilder, OpStep, addsubset::AddSubsetConfig, fix::FixConfig},
     recipe::{Provider, Recipe, Step},
-    recipe_providers::googlefonts::{GoogleFontsOptions, instance_user_location},
+    recipe_providers::{
+        googlefonts::{GoogleFontsOptions, instance_user_location},
+        staticnames,
+    },
 };
 
 pub type NotoOptions = GoogleFontsOptions; // They're the same these days
@@ -177,6 +180,9 @@ impl NotoProvider {
         }
         for source in self.sources.iter() {
             for instance in source.instances.iter() {
+                if !staticnames::should_build_static(instance) {
+                    continue;
+                }
                 self.recipe
                     .extend(self.build_a_static(source, instance, have_variables)?);
             }
@@ -201,35 +207,9 @@ impl NotoProvider {
             })?
             .to_string_lossy()
             .to_string();
-        // In python, we use the basename of the instance filename. i.e.
-        // <instance name="Noto Sans Mongolian Regular"
-        //           familyname="Noto Sans Mongolian"
-        //           stylename="Regular"
-        //           filename="instance_ufo/NotoSansMongolian-Regular.ufo" ...>
-        // becomes NotoSansMongolian-Regular(.ttf)
-        // Which is fine because in Python, we always convert to Designspace first and this
-        // generates a filename for us. Here we don't work from DS, and our babelfont Instance
-        // objects don't have a filename attribute.
-
-        // If we have a preferred subfamily name (DS), use that, else instance name (Glyphs)
-        let family_name = source
-            .names
-            .family_name
-            .get_default()
-            .map(|x| x.to_string())
-            .unwrap_or("Unknown".to_string());
-        let subfamily = if let Some(preferred_subfamily_name) =
-            instance.custom_names.preferred_subfamily_name.get_default()
-        {
-            preferred_subfamily_name.to_string()
-        } else if let Some(instance_name) = instance.name.get_default_or_fallback() {
-            instance_name
-                .to_string()
-                .replace(&(family_name.to_owned() + " "), "")
-        } else {
-            "Regular".to_string()
-        };
-        let instancebase = format!("{}-{}", family_name, subfamily).replace(" ", "");
+        // Which static font this is. The naming rules are shared with the Google
+        // Fonts provider; see `staticnames`.
+        let instancebase = staticnames::static_base_name(source, instance);
 
         let mut base_builder = ConfigOperationBuilder::new().source(source_path.clone());
         base_builder = base_builder.compile(&self.options.fontc_config);
