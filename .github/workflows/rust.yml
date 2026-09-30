@@ -146,11 +146,6 @@ jobs:
         with:
           name: ${{ env.ASSET }}
           path: ${{ env.ASSET }}
-      - if: contains(github.ref, 'refs/tags/v')
-        name: Add artefact to release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload v${{ env.VERSION }} ${{ env.ASSET }}
 
   publish-crate:
     needs: deploy-binaries
