@@ -37,6 +37,9 @@ struct Args {
     /// Limit number of parallel jobs (defaults to number of CPU cores)
     #[clap(long)]
     jobs: Option<usize>,
+    /// Target to build (defaults to all targets)
+    #[clap(long)]
+    pub target: Option<String>,
     config_file: String,
 }
 
@@ -82,6 +85,7 @@ async fn main() {
         debug_intermediates: args.debug,
         verbosity: level,
         progress: !args.no_progress,
+        target: args.target.clone(),
     };
 
     if let Err(error) = build(build_config).await {

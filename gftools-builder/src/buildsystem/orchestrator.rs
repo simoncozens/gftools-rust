@@ -4,6 +4,7 @@
 //! Many thanks to Yota Toyama for making this code available under the MIT/Apache licenses.
 //! A parallel build system in just under 200 lines of Rust is astonishing.
 use crate::{
+    BuildConfig,
     buildsystem::{BuildGraph, BuildStep, OperationOutput, graph::BuildEdge},
     error::ApplicationError,
 };
@@ -109,22 +110,17 @@ fn get_target_files(context: &Context, index: NodeIndex) -> Vec<String> {
     targets
 }
 
-pub async fn run(
-    graph: BuildGraph,
-    job_limit: usize,
-    progress: bool,
-    verbosity: Level,
-) -> Result<(), ApplicationError> {
+pub async fn run(graph: BuildGraph, config: &BuildConfig) -> Result<(), ApplicationError> {
     let target_count = graph.target_nodes.len();
-    let progress_mode = select_progress_mode(progress, target_count);
+    let progress_mode = select_progress_mode(config.progress, target_count);
     let configuration = Configuration::new(graph);
     let context = Arc::new(Context::new(
-        job_limit,
+        config.job_limit,
         Arc::new(configuration),
-        progress,
+        config.progress,
         progress_mode,
         target_count,
-        verbosity,
+        config.verbosity,
     ));
     let mut target_futures = Vec::with_capacity(target_count);
 

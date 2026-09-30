@@ -135,7 +135,11 @@ impl Recipe {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-    pub fn to_graph(&self, debug_intermediates: bool) -> Result<BuildGraph, ApplicationError> {
+    pub fn to_graph(
+        &self,
+        debug_intermediates: bool,
+        build_single_target: Option<&String>,
+    ) -> Result<BuildGraph, ApplicationError> {
         let _span = info_span!("generate_graph").entered();
         let mut graph = BuildGraph::new(debug_intermediates);
 
@@ -144,6 +148,9 @@ impl Recipe {
         let mut source_dependencies: Vec<(petgraph::graph::NodeIndex, String)> = Vec::new();
 
         for (target, operation) in self.0.iter() {
+            if build_single_target.is_some_and(|t| t.as_str() != target) {
+                continue;
+            }
             // First operation must be a source step
             let source = operation.0.first().ok_or_else(|| {
                 ApplicationError::InvalidRecipe(format!("No steps found for target '{target}'"))

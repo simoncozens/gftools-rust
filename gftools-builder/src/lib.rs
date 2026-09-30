@@ -30,6 +30,8 @@ pub struct BuildConfig {
     pub verbosity: log::Level,
     /// Whether to show progress bars
     pub progress: bool,
+    /// Target to build (defaults to all targets)
+    pub target: Option<String>,
 }
 
 impl Default for BuildConfig {
@@ -44,6 +46,7 @@ impl Default for BuildConfig {
             debug_intermediates: false,
             verbosity: log::Level::Info,
             progress: true,
+            target: None,
         }
     }
 }
@@ -96,14 +99,14 @@ pub fn generate_ascii_graph(
     verbosity: log::Level,
     debug_intermediates: bool,
 ) -> Result<String, ApplicationError> {
-    let graph = recipe.to_graph(debug_intermediates)?;
+    let graph = recipe.to_graph(debug_intermediates, None)?;
     graph.ascii(verbosity)
 }
 
 /// Generate an SVG graph of the build process
 #[cfg(feature = "graphviz")]
 pub fn generate_svg_graph(recipe: &Recipe) -> Result<String, ApplicationError> {
-    let graph = recipe.to_graph(false)?;
+    let graph = recipe.to_graph(false, None)?;
     graph.draw()
 }
 
@@ -161,11 +164,11 @@ pub async fn build(config: BuildConfig) -> Result<(), ApplicationError> {
     }
 
     // Use the config to create a build graph
-    let graph = recipe.to_graph(config.debug_intermediates)?;
+    let graph = recipe.to_graph(config.debug_intermediates, config.target.as_ref())?;
     graph.ensure_directories()?;
 
     // Run the build
-    buildsystem::run(graph, config.job_limit, config.progress, config.verbosity).await?;
+    buildsystem::run(graph, &config).await?;
 
     Ok(())
 }

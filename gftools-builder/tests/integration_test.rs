@@ -72,6 +72,7 @@ async fn test_radio_canada_build() {
         debug_intermediates: false,
         verbosity: log::Level::Error,
         progress: false,
+        target: None,
     };
 
     // Run the build
@@ -154,6 +155,7 @@ async fn test_radio_canada_generate_recipe() {
         debug_intermediates: false,
         verbosity: log::Level::Error,
         progress: false,
+        target: None,
     };
 
     // Run recipe generation (should just print, not build)
@@ -201,6 +203,7 @@ async fn test_radio_canada_ascii_graph() {
         debug_intermediates: false,
         verbosity: log::Level::Error,
         progress: false,
+        target: None,
     };
 
     // Run ASCII graph generation
