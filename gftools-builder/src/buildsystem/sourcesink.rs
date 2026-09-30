@@ -18,7 +18,7 @@ impl Operation for SourceSink {
         _outputs: &[OperationOutput],
     ) -> Result<Output, ApplicationError> {
         Ok(Output {
-            status: ExitStatus::default(0),
+            status: ExitStatus::default(),
             stdout: Vec::new(),
             stderr: Vec::new(),
         })
