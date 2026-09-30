@@ -1750,7 +1750,7 @@ dependencies = [
 [[package]]
 name = "fontspector-checkapi"
 version = "1.8.0"
-source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
+source = "git+https://github.com/fonttools/fontspector#a39c36174132dabd638b1520ecd9e2b92c488f11"
 dependencies = [
  "clap",
  "fontdrasil",
@@ -1774,7 +1774,7 @@ dependencies = [
 [[package]]
 name = "fontspector-checkhelper"
 version = "1.0.2"
-source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
+source = "git+https://github.com/fonttools/fontspector#a39c36174132dabd638b1520ecd9e2b92c488f11"
 dependencies = [
  "darling 0.23.0",
  "proc-macro2",
@@ -1785,7 +1785,7 @@ dependencies = [
 [[package]]
 name = "fontspector-hotfix"
 version = "0.5.0"
-source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
+source = "git+https://github.com/fonttools/fontspector#a39c36174132dabd638b1520ecd9e2b92c488f11"
 dependencies = [
  "dialoguer",
  "fontspector-checkapi",
@@ -1800,7 +1800,7 @@ dependencies = [
 [[package]]
 name = "fontspector-profile-googlefonts"
 version = "1.9.1"
-source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
+source = "git+https://github.com/fonttools/fontspector#a39c36174132dabd638b1520ecd9e2b92c488f11"
 dependencies = [
  "edit-distance",
  "fontspector-checkapi",
@@ -1824,7 +1824,7 @@ dependencies = [
 [[package]]
 name = "fontspector-profile-opentype"
 version = "1.7.0"
-source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
+source = "git+https://github.com/fonttools/fontspector#a39c36174132dabd638b1520ecd9e2b92c488f11"
 dependencies = [
  "fontspector-checkapi",
  "fontspector-checkhelper",
@@ -1838,8 +1838,8 @@ dependencies = [
 
 [[package]]
 name = "fontspector-profile-universal"
-version = "1.8.6"
-source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
+version = "1.8.7"
+source = "git+https://github.com/fonttools/fontspector#a39c36174132dabd638b1520ecd9e2b92c488f11"
 dependencies = [
  "fontdrasil",
  "fontspector-checkapi",
