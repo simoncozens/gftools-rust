@@ -1,7 +1,4 @@
-use std::{
-    os::unix::process::ExitStatusExt,
-    process::{ExitStatus, Output},
-};
+use std::process::{ExitStatus, Output};
 
 use crate::{
     buildsystem::{Operation, OperationOutput},
@@ -21,7 +18,7 @@ impl Operation for SourceSink {
         _outputs: &[OperationOutput],
     ) -> Result<Output, ApplicationError> {
         Ok(Output {
-            status: ExitStatus::from_raw(0),
+            status: ExitStatus::default(0),
             stdout: Vec::new(),
             stderr: Vec::new(),
         })
