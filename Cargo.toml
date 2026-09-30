@@ -72,7 +72,7 @@ unicode_names2 = "2.0.0"
 write-fonts = "0.53.0"
 zip = "7.2.0"
 tabled = "0.22.0"
-gftools = { path = "gftools-lib" }
+gftools = { path = "gftools-lib", version = "0.1.0-alpha" }
 norad = "0.18.4"
 chrono = "0.4.45"
 scraper = "0.23.1"
