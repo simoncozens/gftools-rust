@@ -70,3 +70,6 @@ gf-metadata.workspace = true
 pretty_assertions = { workspace = true }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/{name}-v{ version }/{ name }-{ target }{ archive-suffix }"
