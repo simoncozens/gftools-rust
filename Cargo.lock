@@ -1750,7 +1750,7 @@ dependencies = [
 [[package]]
 name = "fontspector-checkapi"
 version = "1.8.0"
-source = "git+https://github.com/fonttools/fontspector#51855914932e7f781cc2955170cc210fdf2ac36f"
+source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
 dependencies = [
  "clap",
  "fontdrasil",
@@ -1774,7 +1774,7 @@ dependencies = [
 [[package]]
 name = "fontspector-checkhelper"
 version = "1.0.2"
-source = "git+https://github.com/fonttools/fontspector#51855914932e7f781cc2955170cc210fdf2ac36f"
+source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
 dependencies = [
  "darling 0.23.0",
  "proc-macro2",
@@ -1785,7 +1785,7 @@ dependencies = [
 [[package]]
 name = "fontspector-hotfix"
 version = "0.5.0"
-source = "git+https://github.com/fonttools/fontspector#51855914932e7f781cc2955170cc210fdf2ac36f"
+source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
 dependencies = [
  "dialoguer",
  "fontspector-checkapi",
@@ -1799,8 +1799,8 @@ dependencies = [
 
 [[package]]
 name = "fontspector-profile-googlefonts"
-version = "1.9.0"
-source = "git+https://github.com/fonttools/fontspector#51855914932e7f781cc2955170cc210fdf2ac36f"
+version = "1.9.1"
+source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
 dependencies = [
  "edit-distance",
  "fontspector-checkapi",
@@ -1824,7 +1824,7 @@ dependencies = [
 [[package]]
 name = "fontspector-profile-opentype"
 version = "1.7.0"
-source = "git+https://github.com/fonttools/fontspector#51855914932e7f781cc2955170cc210fdf2ac36f"
+source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
 dependencies = [
  "fontspector-checkapi",
  "fontspector-checkhelper",
@@ -1838,13 +1838,12 @@ dependencies = [
 
 [[package]]
 name = "fontspector-profile-universal"
-version = "1.8.5"
-source = "git+https://github.com/fonttools/fontspector#51855914932e7f781cc2955170cc210fdf2ac36f"
+version = "1.8.6"
+source = "git+https://github.com/fonttools/fontspector#7c85abfec9c031076510cbc2b78497835985e786"
 dependencies = [
  "fontdrasil",
  "fontspector-checkapi",
  "fontspector-checkhelper",
- "freetype-rs",
  "hashbrown 0.17.1",
  "humansize",
  "itertools 0.15.0",
@@ -1883,28 +1882,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "freetype-rs"
-version = "0.38.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d228d6de56c90dd7585341f341849441b3490180c62d27133e525eb726809b4"
-dependencies = [
- "bitflags 2.13.2",
- "freetype-sys",
- "libc",
-]
-
-[[package]]
-name = "freetype-sys"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eab537ce43cab850c64b4cdc390ce7e4f47f877485ddc323208e268280c308ae"
-dependencies = [
- "cc",
- "libz-sys",
- "pkg-config",
 ]
 
 [[package]]
@@ -4136,18 +4113,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libz-sys"
-version = "1.1.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85bc9657773828b90eeb625adff10eeac83cc21bbfd8e23a03eaa8a33c9e28d9"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
- "vcpkg",
-]
-
-[[package]]
 name = "linesweeper"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5341,9 +5306,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.18"
+version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9746dbde176634f4f2f1faf2404e30a31b2bc1e9cafb5329c95d8177a18c9fc"
+checksum = "0e750cca55fe4f0439a15d0bb529da9651e79993e8e72c61a899a36d462befbe"
 dependencies = [
  "aws-lc-rs",
  "bytes",
@@ -5364,9 +5329,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-udp"
-version = "0.5.15"
+version = "0.5.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35a133f956daabe89a61a685c2649f13d82d5aa4bd5d12d1277e1072a21c0694"
+checksum = "af66907df18639dcf4db56ca65490cabc4b27a97dbadd96f2926cca73298f016"
 dependencies = [
  "cfg_aliases",
  "libc",
