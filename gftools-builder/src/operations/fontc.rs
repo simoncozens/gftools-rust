@@ -28,6 +28,9 @@ pub struct FontcConfig {
 
     #[serde(default = "default_to_true")]
     pub reverse_outline_direction: bool,
+
+    #[serde(default)]
+    pub no_production_names: bool,
 }
 
 fn default_to_true() -> bool {
@@ -40,6 +43,7 @@ impl Default for FontcConfig {
             flatten_components: false,
             decompose_transformed_components: false,
             reverse_outline_direction: true,
+            no_production_names: false,
         }
     }
 }
@@ -70,6 +74,9 @@ impl Fontc {
 
         if !self.config.reverse_outline_direction {
             options.flags.insert(Flags::KEEP_DIRECTION);
+        }
+        if self.config.no_production_names {
+            options.flags.remove(Flags::PRODUCTION_NAMES);
         }
 
         options
