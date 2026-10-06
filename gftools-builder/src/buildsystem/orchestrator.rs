@@ -165,6 +165,7 @@ pub async fn run(graph: BuildGraph, config: &BuildConfig) -> Result<(), Applicat
     result.map(|_| ())
 }
 
+#[expect(clippy::double_must_use)] // Clippy bug, keep until https://github.com/rust-lang/rust-clippy/issues/17831 lands
 #[async_recursion]
 async fn trigger_build(context: Arc<Context>, build: NodeIndex) -> Result<(), ApplicationError> {
     let targets = get_target_files(&context, build);
