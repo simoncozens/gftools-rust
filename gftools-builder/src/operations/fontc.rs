@@ -41,7 +41,7 @@ impl Default for FontcConfig {
     fn default() -> Self {
         Self {
             flatten_components: false,
-            decompose_transformed_components: false,
+            decompose_transformed_components: true,
             reverse_outline_direction: true,
             no_production_names: false,
         }
