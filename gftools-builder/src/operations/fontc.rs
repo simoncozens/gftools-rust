@@ -29,8 +29,8 @@ pub struct FontcConfig {
     #[serde(default = "default_to_true")]
     pub reverse_outline_direction: bool,
 
-    #[serde(default)]
-    pub no_production_names: bool,
+    #[serde(default = "default_to_true")]
+    pub production_names: bool,
 }
 
 fn default_to_true() -> bool {
@@ -43,7 +43,7 @@ impl Default for FontcConfig {
             flatten_components: false,
             decompose_transformed_components: true,
             reverse_outline_direction: true,
-            no_production_names: false,
+            production_names: true,
         }
     }
 }
@@ -75,7 +75,7 @@ impl Fontc {
         if !self.config.reverse_outline_direction {
             options.flags.insert(Flags::KEEP_DIRECTION);
         }
-        if self.config.no_production_names {
+        if !self.config.production_names {
             options.flags.remove(Flags::PRODUCTION_NAMES);
         }
 
@@ -132,5 +132,21 @@ impl Operation for Fontc {
 
     fn description(&self) -> String {
         "Compile font".to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn flags(config: &str) -> fontc::Flags {
+        let config: FontcConfig = serde_json::from_str(config).unwrap();
+        Fontc { config }.fontc_options().flags
+    }
+
+    #[test]
+    fn production_names_default_on_and_can_be_turned_off() {
+        assert!(flags("{}").contains(Flags::PRODUCTION_NAMES));
+        assert!(!flags(r#"{"productionNames": false}"#).contains(Flags::PRODUCTION_NAMES));
     }
 }
