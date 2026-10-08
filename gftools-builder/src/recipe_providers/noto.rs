@@ -173,7 +173,20 @@ impl NotoProvider {
             return Ok(());
         }
         for source in self.sources.iter() {
-            for instance in source.instances.iter() {
+            // If the source is UFO format, synthesise an instance for it
+            let instances = if source.instances.is_empty()
+                && source.axes.is_empty()
+                && source.masters.len() == 1
+            {
+                let regular_instance = Instance {
+                    name: "Regular".into(),
+                    ..Default::default()
+                };
+                &vec![regular_instance]
+            } else {
+                &source.instances
+            };
+            for instance in instances.iter() {
                 if !staticnames::should_build_static(instance) {
                     continue;
                 }
