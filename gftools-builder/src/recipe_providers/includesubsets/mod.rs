@@ -1,6 +1,11 @@
+use std::collections::BTreeSet;
+
 use crate::{
     error::ApplicationError,
-    operations::addsubset::{layout_handling_deser, layout_handling_ser},
+    operations::{
+        ConfigOperationBuilder,
+        addsubset::{AddSubsetConfig, layout_handling_deser, layout_handling_ser},
+    },
 };
 use google_fonts_glyphsets::GLYPHSETS;
 use serde::{Deserialize, Serialize};
@@ -203,6 +208,142 @@ impl IncludeSubsetsOptions {
     }
 }
 
+/// Consolidate a list of include-subsets specifications down to the minimal
+/// number of merge operations.
+///
+/// Subsets that share a donor font and the same merge options (layout handling,
+/// force, and any exclusion files) are combined into a single specification
+/// whose codepoints are the union of the originals. This mirrors the Python
+/// builder's `prepare_minimal_subsets`: specifying two subsets from the same
+/// donor produces a single `AddSubset` operation rather than two.
+///
+/// Codepoints excluded by one subset are removed from that subset's
+/// contribution before the union, so an exclusion in one subset does not affect
+/// the codepoints requested by another.
+pub fn minimize_subsets(
+    subsets: &[IncludeSubsetsOptions],
+) -> Result<Vec<IncludeSubsetsOptions>, ApplicationError> {
+    struct Group {
+        template: IncludeSubsetsOptions,
+        codepoints: BTreeSet<u32>,
+        exclude_glyphs: BTreeSet<String>,
+        members: usize,
+    }
+
+    let mut groups: Vec<Group> = Vec::new();
+    for subset in subsets {
+        let codepoints = subset.subset.resolve()?;
+        let group = match groups
+            .iter_mut()
+            .find(|group| same_merge_group(&group.template, subset))
+        {
+            Some(group) => group,
+            None => {
+                groups.push(Group {
+                    template: subset.clone(),
+                    codepoints: BTreeSet::new(),
+                    exclude_glyphs: BTreeSet::new(),
+                    members: 0,
+                });
+                groups.last_mut().expect("a group was just pushed")
+            }
+        };
+        group.codepoints.extend(
+            codepoints
+                .into_iter()
+                .filter(|codepoint| !subset.exclude_codepoints.contains(codepoint)),
+        );
+        group
+            .exclude_glyphs
+            .extend(subset.exclude_glyphs.iter().cloned());
+        group.members += 1;
+    }
+
+    Ok(groups
+        .into_iter()
+        .map(|group| {
+            // A lone subset with nothing to exclude needs no rewriting. Keeping it
+            // verbatim preserves named glyphsets (e.g. `GF_Latin_Core`) instead of
+            // expanding them into explicit ranges.
+            if group.members == 1 && group.template.exclude_codepoints.is_empty() {
+                return group.template;
+            }
+            let mut options = group.template;
+            options.subset = IncludeSubsetsCodepoints {
+                name: None,
+                ranges: Some(codepoints_to_ranges(&group.codepoints)),
+            };
+            options.exclude_glyphs = group.exclude_glyphs.into_iter().collect();
+            // Excluded codepoints have been folded into `subset` above.
+            options.exclude_codepoints = Vec::new();
+            options
+        })
+        .collect())
+}
+
+/// Two subsets can be merged when they draw from the same donor with the same
+/// merge options. The exclusion *files* must also match, because we cannot merge
+/// two different files into one field.
+fn same_merge_group(a: &IncludeSubsetsOptions, b: &IncludeSubsetsOptions) -> bool {
+    a.from == b.from
+        && a.layout_handling == b.layout_handling
+        && a.force == b.force
+        && a.exclude_glyphs_file == b.exclude_glyphs_file
+        && a.exclude_codepoints_file == b.exclude_codepoints_file
+}
+
+/// Compress a sorted set of codepoints into the smallest set of inclusive ranges.
+fn codepoints_to_ranges(codepoints: &BTreeSet<u32>) -> Vec<UnicodeRange> {
+    let mut ranges = Vec::new();
+    let mut iter = codepoints.iter().copied();
+    let Some(first) = iter.next() else {
+        return ranges;
+    };
+    let mut start = first;
+    let mut end = first;
+    for codepoint in iter {
+        if codepoint == end.saturating_add(1) {
+            end = codepoint;
+        } else {
+            ranges.push(UnicodeRange { start, end });
+            start = codepoint;
+            end = codepoint;
+        }
+    }
+    ranges.push(UnicodeRange { start, end });
+    ranges
+}
+
+/// Append the `AddSubset` operations described by `subsets` to `builder`.
+///
+/// Shared by the Google Fonts and Noto recipe providers. The subsets are
+/// consolidated with [`minimize_subsets`] first, so that a source only ever gets
+/// one merge per donor font.
+pub fn add_subset_steps(
+    mut builder: ConfigOperationBuilder,
+    subsets: &[IncludeSubsetsOptions],
+) -> Result<ConfigOperationBuilder, ApplicationError> {
+    for options in minimize_subsets(subsets)? {
+        let donor_font = options.obtain_donor_font()?;
+        let codepoints = options.subset.resolve()?;
+        builder = builder.add_subset(
+            &AddSubsetConfig {
+                include_glyphs: vec![],
+                exclude_glyphs: options.exclude_glyphs.clone(),
+                include_codepoints: codepoints,
+                existing_glyph_handling: if options.force {
+                    fontmerge::ExistingGlyphHandling::Replace
+                } else {
+                    fontmerge::ExistingGlyphHandling::Skip
+                },
+                layout_handling: options.layout_handling,
+            },
+            &donor_font,
+        );
+    }
+    Ok(builder)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,5 +427,90 @@ mod tests {
         let codepoints = subset.resolve().unwrap();
         assert!(codepoints.contains(&0x0041)); // 'A'
         assert!(!codepoints.contains(&0x0410)); // 'Ж'
+    }
+
+    fn options(
+        from: &str,
+        range: Option<(u32, u32)>,
+        exclude_codepoints: Vec<u32>,
+    ) -> IncludeSubsetsOptions {
+        IncludeSubsetsOptions {
+            from: IncludeSubsetsSource::NamedSource(from.to_string()),
+            subset: IncludeSubsetsCodepoints {
+                name: None,
+                ranges: range.map(|(start, end)| vec![UnicodeRange { start, end }]),
+            },
+            layout_handling: fontmerge::LayoutHandling::Subset,
+            force: false,
+            exclude_glyphs: vec![],
+            exclude_codepoints,
+            exclude_glyphs_file: None,
+            exclude_codepoints_file: None,
+        }
+    }
+
+    #[test]
+    fn test_minimize_merges_subsets_from_the_same_donor() {
+        let subsets = vec![
+            options("Noto Sans", Some((0x41, 0x43)), vec![]),
+            options("Noto Sans", Some((0x43, 0x45)), vec![]),
+        ];
+
+        let minimized = minimize_subsets(&subsets).unwrap();
+
+        assert_eq!(minimized.len(), 1);
+        assert_eq!(
+            minimized[0].subset.resolve().unwrap(),
+            vec![0x41, 0x42, 0x43, 0x44, 0x45]
+        );
+    }
+
+    #[test]
+    fn test_minimize_keeps_different_donors_separate() {
+        let subsets = vec![
+            options("Noto Sans", Some((0x41, 0x41)), vec![]),
+            options("Noto Serif", Some((0x41, 0x41)), vec![]),
+        ];
+
+        assert_eq!(minimize_subsets(&subsets).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_minimize_keeps_distinct_options_separate() {
+        let force = IncludeSubsetsOptions {
+            force: true,
+            ..options("Noto Sans", Some((0x41, 0x41)), vec![])
+        };
+        let subsets = vec![options("Noto Sans", Some((0x41, 0x41)), vec![]), force];
+
+        assert_eq!(minimize_subsets(&subsets).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_minimize_leaves_single_named_subset_alone() {
+        let subsets = vec![IncludeSubsetsOptions {
+            from: IncludeSubsetsSource::NamedSource("Noto Sans".to_string()),
+            subset: IncludeSubsetsCodepoints {
+                name: Some("GF_Latin_Core".to_string()),
+                ranges: None,
+            },
+            ..options("Noto Sans", None, vec![])
+        }];
+
+        let minimized = minimize_subsets(&subsets).unwrap();
+
+        // The named glyphset should be preserved verbatim rather than expanded.
+        assert_eq!(minimized, subsets);
+    }
+
+    #[test]
+    fn test_minimize_bakes_excluded_codepoints() {
+        let subsets = vec![options("Noto Sans", Some((0x41, 0x43)), vec![0x41])];
+
+        let minimized = minimize_subsets(&subsets).unwrap();
+
+        assert_eq!(minimized.len(), 1);
+        assert_eq!(minimized[0].subset.resolve().unwrap(), vec![0x42, 0x43]);
+        assert!(minimized[0].exclude_codepoints.is_empty());
     }
 }

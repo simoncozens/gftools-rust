@@ -8,10 +8,9 @@ use std::{collections::HashMap, path::Path};
 
 use crate::{
     error::ApplicationError,
-    operations::{
-        ConfigOperationBuilder, addsubset::AddSubsetConfig, fix::FixConfig, fontc::FontcConfig,
-    },
+    operations::{ConfigOperationBuilder, fix::FixConfig, fontc::FontcConfig},
     recipe::{Provider, Recipe},
+    recipe_providers::includesubsets::add_subset_steps,
 };
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -487,7 +486,7 @@ impl GoogleFontsProvider {
                 .to_string_lossy()
                 .to_string(),
         );
-        builder = self.add_subset_steps(builder)?;
+        builder = add_subset_steps(builder, &self.options.include_subsets)?;
         builder = builder.compile(&self.options.fontc_config);
         // Any post-compile steps
         // Any VTT steps
@@ -550,7 +549,7 @@ impl GoogleFontsProvider {
                 .to_string_lossy()
                 .to_string(),
         );
-        builder = self.add_subset_steps(builder)?;
+        builder = add_subset_steps(builder, &self.options.include_subsets)?;
         // If there are more than 1 masters, we need to slim down the font to
         // the master and instance location specified.
         if source.masters.len() > 1 {
@@ -608,31 +607,6 @@ impl GoogleFontsProvider {
         }
 
         None
-    }
-
-    fn add_subset_steps(
-        &self,
-        mut builder: ConfigOperationBuilder,
-    ) -> Result<ConfigOperationBuilder, ApplicationError> {
-        for subset_options in &self.options.include_subsets {
-            let donor_font = subset_options.obtain_donor_font()?;
-            let codepoints = subset_options.subset.resolve()?;
-            builder = builder.add_subset(
-                &AddSubsetConfig {
-                    include_glyphs: vec![],
-                    exclude_glyphs: vec![],
-                    include_codepoints: codepoints,
-                    existing_glyph_handling: if subset_options.force {
-                        fontmerge::ExistingGlyphHandling::Replace
-                    } else {
-                        fontmerge::ExistingGlyphHandling::Skip
-                    },
-                    layout_handling: subset_options.layout_handling,
-                },
-                &donor_font,
-            )
-        }
-        Ok(builder)
     }
 }
 
