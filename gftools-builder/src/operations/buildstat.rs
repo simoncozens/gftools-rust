@@ -15,6 +15,13 @@ impl Operation for BuildStat {
         "BuildStat"
     }
 
+    /// `BuildStat` takes a set of sibling fonts and re-emits each one with a
+    /// STAT table merged across the whole set, so it owns the artifacts of the
+    /// targets it consumes.
+    fn fuses_targets(&self) -> bool {
+        true
+    }
+
     fn input_kinds(&self) -> Vec<DataKind> {
         vec![DataKind::Bytes]
     }

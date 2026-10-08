@@ -507,7 +507,12 @@ impl GoogleFontsProvider {
                 roman,
             )?;
             log::debug!(" Building webfont target: {}", webfont_target);
-            let webfont_builder = builder.clone().compress();
+            // Compress the variable font we just built rather than recompiling it.
+            // This keeps the webfont in step with any post-compile steps (notably
+            // buildStat) and matches how static webfonts are already produced.
+            let webfont_builder = ConfigOperationBuilder::new()
+                .source(target.clone())
+                .compress();
             recipe.insert(webfont_target, webfont_builder.build());
         }
 

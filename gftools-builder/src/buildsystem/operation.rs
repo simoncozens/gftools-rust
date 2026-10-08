@@ -49,6 +49,22 @@ pub trait Operation: Send + Sync {
         // Default implementation does nothing.
     }
 
+    /// Whether this operation consumes the targets named in its `needs` list
+    /// positionally and re-emits them, taking ownership of their artifacts.
+    ///
+    /// A "fusing" operation is an n-input/n-output step in which input slot `i`
+    /// corresponds to output slot `i`: slot 0 is the operation's own target and
+    /// slots `1..=n` are the `needs` targets, in order. When such an operation
+    /// appears on a target's path it becomes the producer of the needed targets'
+    /// artifacts, and every downstream consumer of those targets reads this
+    /// operation's output instead.
+    ///
+    /// This is intrinsic to the operation and cannot be configured away; an
+    /// operation with an empty `needs` list behaves like an ordinary step.
+    fn fuses_targets(&self) -> bool {
+        false
+    }
+
     /// Whether this operation should be hidden from user-facing output.
     fn hidden(&self) -> bool {
         false

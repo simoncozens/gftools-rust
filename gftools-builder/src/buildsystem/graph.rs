@@ -16,18 +16,19 @@ pub struct AddedPath {
 }
 
 /// An edge in the build graph, representing data flow from one operation to another.
-/// The edge specifies which output slot from the source operation it consumes.
 #[derive(Clone)]
 pub struct BuildEdge {
     /// The actual data/file being passed
     pub output: OperationOutput,
-    /// Which output slot from the source operation (0-indexed)
-    pub output_slot: usize,
+    /// Which output slot of the source operation this edge reads from (0-indexed)
+    pub from_slot: usize,
+    /// Which input slot of the destination operation this edge feeds (0-indexed)
+    pub to_slot: usize,
 }
 
 impl Display for BuildEdge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.output_slot, self.output)
+        write!(f, "{}->{}:{}", self.from_slot, self.to_slot, self.output)
     }
 }
 
@@ -36,8 +37,18 @@ pub struct BuildGraph {
     debug_intermediates: bool,
     pub source: NodeIndex,
     pub sinks: Vec<NodeIndex>,
-    /// Maps target names to their final operation node (before the sink)
+    /// Maps target names to the node that finally produces their artifact (the
+    /// "owner"). This is *derived* by [`BuildGraph::resolve_dependencies`] and is
+    /// what the orchestrator iterates over to know what to build.
     pub(crate) target_nodes: std::collections::HashMap<String, NodeIndex>,
+    /// The last operation node on each target's own path, before any fusing
+    /// operation takes ownership of its artifact.
+    terminals: std::collections::HashMap<String, NodeIndex>,
+    /// The sink node that writes each target's file.
+    sink_nodes: std::collections::HashMap<String, NodeIndex>,
+    /// Synthetic `Source` nodes for input files that aren't produced by any
+    /// recipe target, keyed by path so they're shared between consumers.
+    external_sources: std::collections::HashMap<String, NodeIndex>,
 }
 
 impl BuildGraph {
@@ -52,6 +63,9 @@ impl BuildGraph {
             source,
             sinks,
             target_nodes: std::collections::HashMap::new(),
+            terminals: std::collections::HashMap::new(),
+            sink_nodes: std::collections::HashMap::new(),
+            external_sources: std::collections::HashMap::new(),
         }
     }
 
@@ -225,7 +239,8 @@ impl BuildGraph {
                             new_conv_node,
                             BuildEdge {
                                 output: broadcast_output.clone(),
-                                output_slot: 0,
+                                from_slot: 0,
+                                to_slot: 0,
                             },
                         );
                         new_conv_node
@@ -294,7 +309,8 @@ impl BuildGraph {
             let next_node = self.graph.add_node(op);
             let edge = BuildEdge {
                 output: broadcast_output,
-                output_slot: 0,
+                from_slot: 0,
+                to_slot: 0,
             };
             self.graph.update_edge(current_node, next_node, edge);
 
@@ -325,28 +341,32 @@ impl BuildGraph {
         let outgoing: Vec<_> = self
             .graph
             .edges_directed(current_node, petgraph::Direction::Outgoing)
-            .map(|e| (e.target(), e.weight().output_slot))
+            .map(|e| (e.target(), e.weight().from_slot, e.weight().to_slot))
             .collect();
-        for (target, slot) in outgoing {
+        for (target, from_slot, to_slot) in outgoing {
             let edge = BuildEdge {
                 output: final_output.clone(),
-                output_slot: slot,
+                from_slot,
+                to_slot,
             };
             self.graph.update_edge(current_node, target, edge);
         }
 
-        // Create a sink node and add it to the list of sinks, using slot 0
+        // Create a sink node and add it to the list of sinks
         let sink_node = self.graph.add_node(Arc::new(Box::new(SourceSink::Sink)));
         let edge = BuildEdge {
             output: final_output,
-            output_slot: 0,
+            from_slot: 0,
+            to_slot: 0,
         };
         self.graph.update_edge(current_node, sink_node, edge);
         self.sinks.push(sink_node);
 
-        // Track this target's final node (before sink) for dependency resolution
-        self.target_nodes
+        // Note this target's terminal node and sink; ownership is worked out later
+        // in `resolve_dependencies`, once every path has been materialised.
+        self.terminals
             .insert(sink_filename.to_string(), current_node);
+        self.sink_nodes.insert(sink_filename.to_string(), sink_node);
 
         AddedPath {
             entry_node: entry_node.unwrap_or(sink_node),
@@ -354,159 +374,143 @@ impl BuildGraph {
         }
     }
 
-    /// Add a dependency from a target to a node that needs it as an additional input.
-    /// This creates edges from the dependency target's producing node to the dependent node.
-    /// For operations that need n inputs and produce n outputs (like BuildStat), this also
-    /// redirects the dependency's sink to go through the dependent node.
+    /// Wire up all the cross-references (`needs` entries and `source:` steps)
+    /// once every target's linear path has been materialised.
     ///
-    /// # Arguments
-    /// * `target_name` - The name of the target that produces the needed file
-    /// * `dependent_node` - The node that needs the target as an additional input
-    /// * `input_slot` - Which input slot (0-indexed) this dependency fills
-    pub fn add_dependency(
+    /// This runs in phases so that it is order-independent and idempotent:
+    ///
+    /// 1. Work out the *owner* of each target's artifact. By default that's the
+    ///    last node of the target's own path; a fusing operation
+    ///    ([`Operation::fuses_targets`]) takes ownership of the targets it
+    ///    re-emits.
+    /// 2. Add a fan-in edge for each `needs` entry. A fusing operation reads the
+    ///    *pre-fusion* artifact of the targets it re-emits; every other consumer
+    ///    reads the target's final (owned) artifact.
+    /// 3. Move the sink of each fused target so its file is written by the owner.
+    /// 4. Rewire `source:` steps naming another target to read that target's
+    ///    owned artifact.
+    /// 5. Record the final owners in `target_nodes` for the orchestrator.
+    pub(crate) fn resolve_dependencies(
         &mut self,
-        target_name: &str,
-        dependent_node: NodeIndex,
-        input_slot: usize,
+        dependencies: &[(NodeIndex, Vec<String>, bool)],
+        source_dependencies: &[(NodeIndex, String)],
     ) -> Result<(), ApplicationError> {
-        let maybe_node = self.target_nodes.get(target_name);
-        if maybe_node.is_none() && std::path::Path::new(target_name).exists() {
-            // For existing files, we don't need a producer. Just add a source node for it
-            let source_node = self.graph.add_node(Arc::new(Box::new(SourceSink::Source)));
-            let edge = BuildEdge {
-                output: RawOperationOutput::from(target_name).into(),
-                output_slot: input_slot,
-            };
-            self.graph.update_edge(source_node, dependent_node, edge);
-            self.target_nodes
-                .insert(target_name.to_string(), source_node);
-            return Ok(());
-        }
-        let producer_node = maybe_node.ok_or_else(|| {
-            ApplicationError::InvalidRecipe(format!(
-                "Dependency target '{}' not found. Make sure it appears in the recipe before it's referenced.",
-                target_name
-            ))
-        })?;
-
-        // A dependency can be requested multiple times when different recipe targets
-        // share the same operation node (e.g. VF target + VF webfont target sharing
-        // BuildStat). Once target_nodes has been updated to point at dependent_node,
-        // a duplicate call would try to wire dependent_node -> dependent_node,
-        // introducing a self-cycle. Treat this as already satisfied.
-        if *producer_node == dependent_node {
-            return Ok(());
-        }
-
-        // Get the specific output that produces this target.
-        let (producer_output, _producer_output_slot) = self
-            .graph
-            .edges_directed(*producer_node, petgraph::Direction::Outgoing)
-            .find_map(|edge| {
-                edge.weight()
-                    .output
-                    .lock()
-                    .ok()
-                    .and_then(|output| match &*output {
-                        RawOperationOutput::NamedFile(name) if name == target_name => {
-                            Some((edge.weight().output.clone(), edge.weight().output_slot))
-                        }
-                        _ => None,
-                    })
-            })
-            .unwrap_or_else(|| (RawOperationOutput::from(target_name).into(), 0));
-
-        // Add input edge from producer to dependent, specifying the input slot
-        let input_edge = BuildEdge {
-            output: producer_output,
-            output_slot: input_slot,
-        };
-        self.graph
-            .update_edge(*producer_node, dependent_node, input_edge);
-
-        // Find the sink node for this dependency target and redirect it through dependent_node
-        // We need to find the sink that's writing to this specific target file
-        let sink_edges: Vec<_> = self
-            .graph
-            .edges_directed(*producer_node, petgraph::Direction::Outgoing)
-            .filter(|edge| {
-                // Check if this edge goes to a Sink node AND has the matching target output
-                if let Some(node_weight) = self.graph.node_weight(edge.target())
-                    && node_weight.shortname() == "Sink"
-                    && let Ok(output) = edge.weight().output.lock()
-                    && let RawOperationOutput::NamedFile(filename) = &*output
-                {
-                    return filename == target_name;
-                }
-                false
-            })
-            .map(|e| (e.target(), e.weight().output.clone()))
+        // Phase 1: work out ownership.
+        let mut owner: std::collections::HashMap<String, (NodeIndex, usize)> = self
+            .terminals
+            .iter()
+            .map(|(name, node)| (name.clone(), (*node, 0)))
             .collect();
+        for (node, needs, fuses) in dependencies {
+            if !*fuses {
+                continue;
+            }
+            for (index, need) in needs.iter().enumerate() {
+                if self.terminals.contains_key(need) {
+                    owner.insert(need.clone(), (*node, index + 1));
+                }
+            }
+        }
 
-        // For each sink, redirect it to go through the dependent node
-        for (sink_node, output) in sink_edges {
-            // Remove the edge from producer to sink
-            if let Some(edge_idx) = self.graph.find_edge(*producer_node, sink_node) {
+        // Phase 2: add the fan-in edges for every `needs` entry.
+        for (node, needs, fuses) in dependencies {
+            for (index, need) in needs.iter().enumerate() {
+                let (source_node, from_slot) = if *fuses {
+                    // A fusing operation reads the pre-fusion artifact of each
+                    // target it re-emits, so resolve to that target's terminal.
+                    match self.terminals.get(need) {
+                        Some(terminal) => (*terminal, 0),
+                        None => (self.external_source(need)?, 0),
+                    }
+                } else {
+                    // Every other consumer reads the target's final artifact.
+                    match owner.get(need) {
+                        Some((owner_node, owner_slot)) => (*owner_node, *owner_slot),
+                        None => (self.external_source(need)?, 0),
+                    }
+                };
+                self.graph.update_edge(
+                    source_node,
+                    *node,
+                    BuildEdge {
+                        output: RawOperationOutput::from(need.as_str()).into(),
+                        from_slot,
+                        to_slot: index + 1,
+                    },
+                );
+            }
+        }
+
+        // Phase 3: move fused targets' sinks so the owner writes their files.
+        for (name, (owner_node, owner_slot)) in &owner {
+            let Some(terminal) = self.terminals.get(name).copied() else {
+                continue;
+            };
+            if terminal == *owner_node {
+                continue;
+            }
+            let Some(sink_node) = self.sink_nodes.get(name).copied() else {
+                continue;
+            };
+            if let Some(edge_idx) = self.graph.find_edge(terminal, sink_node) {
                 self.graph.remove_edge(edge_idx);
             }
+            self.graph.update_edge(
+                *owner_node,
+                sink_node,
+                BuildEdge {
+                    output: RawOperationOutput::from(name.as_str()).into(),
+                    from_slot: *owner_slot,
+                    to_slot: 0,
+                },
+            );
+        }
 
-            // Add edge from dependent_node to sink using the same output slot as the input
-            let output_edge = BuildEdge {
-                output,
-                output_slot: input_slot,
+        // Phase 4: `source:` steps that name another target.
+        for (entry_node, source_name) in source_dependencies {
+            let Some((owner_node, owner_slot)) = owner.get(source_name) else {
+                // An external file: leave the edge from the global Source node.
+                continue;
             };
-            self.graph
-                .update_edge(dependent_node, sink_node, output_edge);
+            if let Some(edge_idx) = self.graph.find_edge(self.source, *entry_node) {
+                self.graph.remove_edge(edge_idx);
+            }
+            self.graph.update_edge(
+                *owner_node,
+                *entry_node,
+                BuildEdge {
+                    output: RawOperationOutput::from(source_name.as_str()).into(),
+                    from_slot: *owner_slot,
+                    to_slot: 0,
+                },
+            );
         }
 
-        if self.target_nodes.contains_key(target_name) {
-            self.target_nodes
-                .insert(target_name.to_string(), dependent_node);
-        }
+        // Phase 5: derived producer map for the orchestrator.
+        self.target_nodes = owner
+            .into_iter()
+            .map(|(name, (node, _slot))| (name, node))
+            .collect();
 
         Ok(())
     }
 
-    pub fn add_source_dependency(
-        &mut self,
-        target_name: &str,
-        dependent_node: NodeIndex,
-    ) -> Result<(), ApplicationError> {
-        let Some(producer_node) = self.target_nodes.get(target_name).copied() else {
-            return Ok(());
-        };
-
-        let (producer_output, producer_output_slot) = self
-            .graph
-            .edges_directed(producer_node, petgraph::Direction::Outgoing)
-            .find_map(|edge| {
-                edge.weight()
-                    .output
-                    .lock()
-                    .ok()
-                    .and_then(|output| match &*output {
-                        RawOperationOutput::NamedFile(name) if name == target_name => {
-                            Some((edge.weight().output.clone(), edge.weight().output_slot))
-                        }
-                        _ => None,
-                    })
-            })
-            .unwrap_or_else(|| (RawOperationOutput::from(target_name).into(), 0));
-
-        if let Some(edge_idx) = self.graph.find_edge(self.source, dependent_node) {
-            self.graph.remove_edge(edge_idx);
+    /// Return (creating if necessary) the synthetic `Source` node that feeds an
+    /// input file which isn't produced by any recipe target. Reusing one node per
+    /// file keeps repeated references idempotent and deterministic.
+    fn external_source(&mut self, name: &str) -> Result<NodeIndex, ApplicationError> {
+        if let Some(node) = self.external_sources.get(name) {
+            return Ok(*node);
         }
-
-        self.graph.update_edge(
-            producer_node,
-            dependent_node,
-            BuildEdge {
-                output: producer_output,
-                output_slot: producer_output_slot,
-            },
-        );
-
-        Ok(())
+        if !Path::new(name).exists() {
+            return Err(ApplicationError::InvalidRecipe(format!(
+                "Dependency target '{}' not found. Make sure it appears in the recipe before it's referenced.",
+                name
+            )));
+        }
+        let node = self.graph.add_node(Arc::new(Box::new(SourceSink::Source)));
+        self.external_sources.insert(name.to_string(), node);
+        Ok(node)
     }
 
     pub fn ensure_directories(&self) -> Result<(), ApplicationError> {

@@ -206,10 +206,10 @@ async fn spawn_build(context: Arc<Context>, index: NodeIndex) -> Result<(), Appl
                 .edges_directed(index, Direction::Incoming)
                 .collect();
             // Collect inputs by slot, similar to how we handle outputs
-            let max_input_slot = in_edges.iter().map(|e| e.weight().output_slot).max().unwrap_or(0);
+            let max_input_slot = in_edges.iter().map(|e| e.weight().to_slot).max().unwrap_or(0);
             let mut input_files = vec![None; max_input_slot + 1];
             for edge in &in_edges {
-                let slot = edge.weight().output_slot;
+                let slot = edge.weight().to_slot;
                 if input_files[slot].is_none() {
                     input_files[slot] = Some(edge.weight().output.clone());
                 }
@@ -224,11 +224,11 @@ async fn spawn_build(context: Arc<Context>, index: NodeIndex) -> Result<(), Appl
                 .edges_directed(index, Direction::Outgoing)
                 .collect();
             // Find the maximum slot number to size our output vector
-            let max_slot = out_edges.iter().map(|e| e.weight().output_slot).max().unwrap_or(0);
+            let max_slot = out_edges.iter().map(|e| e.weight().from_slot).max().unwrap_or(0);
             let mut output_files = vec![None; max_slot + 1];
             // Fill in the output slots - if multiple edges use the same slot, they share the same OperationOutput
             for edge in out_edges {
-                let slot = edge.weight().output_slot;
+                let slot = edge.weight().from_slot;
                 if output_files[slot].is_none() {
                     output_files[slot] = Some(edge.weight().output.clone());
                 }

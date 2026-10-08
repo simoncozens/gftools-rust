@@ -143,8 +143,8 @@ impl Recipe {
         let _span = info_span!("generate_graph").entered();
         let mut graph = BuildGraph::new(debug_intermediates);
 
-        // Track dependencies: (step_node, needs_targets)
-        let mut dependencies: Vec<(petgraph::graph::NodeIndex, Vec<String>)> = Vec::new();
+        // Track dependencies: (step_node, needs_targets, fuses_targets)
+        let mut dependencies: Vec<(petgraph::graph::NodeIndex, Vec<String>, bool)> = Vec::new();
         let mut source_dependencies: Vec<(petgraph::graph::NodeIndex, String)> = Vec::new();
 
         for (target, operation) in self.0.iter() {
@@ -182,24 +182,19 @@ impl Recipe {
             source_dependencies.push((added_path.entry_node, source_filename.to_string()));
 
             // Record dependencies with their corresponding nodes
-            for (step_idx, (_, _, needs)) in operations.iter().enumerate() {
+            for (step_idx, (_, op, needs)) in operations.iter().enumerate() {
                 if !needs.is_empty() && step_idx < added_path.op_nodes.len() {
-                    dependencies.push((added_path.op_nodes[step_idx], needs.clone()));
+                    dependencies.push((
+                        added_path.op_nodes[step_idx],
+                        needs.clone(),
+                        op.fuses_targets(),
+                    ));
                 }
             }
         }
 
-        // Now add dependency edges
-        for (target_node, needs) in dependencies {
-            for (slot, need_target) in needs.iter().enumerate() {
-                // Input slot starts at 1 because slot 0 is the primary input from the path
-                graph.add_dependency(need_target, target_node, slot + 1)?;
-            }
-        }
-
-        for (target_node, source_target) in source_dependencies {
-            graph.add_source_dependency(&source_target, target_node)?;
-        }
+        // Resolve all the cross-references now that every path exists.
+        graph.resolve_dependencies(&dependencies, &source_dependencies)?;
 
         Ok(graph)
     }
@@ -273,6 +268,57 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::buildsystem::BuildGraph;
+    use crate::operations::OpStep;
+    use petgraph::{Direction, graph::NodeIndex, visit::EdgeRef};
+    use std::collections::{HashMap, HashSet};
+    use std::path::PathBuf;
+
+    fn source_step(source: &str) -> Step {
+        Step::SourceStep {
+            source: source.to_string(),
+            extra: HashMap::new(),
+        }
+    }
+
+    fn op_step(operation: OpStep, needs: Vec<String>) -> Step {
+        Step::OperationStep {
+            operation,
+            args: None,
+            input_file: None,
+            extra: HashMap::new(),
+            needs,
+        }
+    }
+
+    fn is_acyclic(graph: &BuildGraph) -> bool {
+        !graph
+            .ascii(log::Level::Error)
+            .expect("rendering the graph should succeed")
+            .starts_with('⚠')
+    }
+
+    /// Whether `shortname` appears anywhere upstream (transitively) of `node`.
+    fn has_ancestor(graph: &BuildGraph, node: NodeIndex, shortname: &str) -> bool {
+        let mut stack = vec![node];
+        let mut seen = HashSet::new();
+        while let Some(current) = stack.pop() {
+            if !seen.insert(current) {
+                continue;
+            }
+            for edge in graph.edges_directed(current, Direction::Incoming) {
+                let source = edge.source();
+                if graph
+                    .node_weight(source)
+                    .is_some_and(|op| op.shortname() == shortname)
+                {
+                    return true;
+                }
+                stack.push(source);
+            }
+        }
+        false
+    }
 
     #[test]
     fn test_deserialize_untagged_googlefonts() {
@@ -341,5 +387,92 @@ sources: "NotAnArray"
             }
             Ok(_) => panic!("Expected deserialization to fail, but it succeeded"),
         }
+    }
+
+    #[test]
+    fn test_buildstat_without_needs_is_a_normal_step() {
+        // A 1-in/1-out buildStat (the future single-font use) must behave like any
+        // other step: it owns only its own target and fuses nothing.
+        let mut recipe = Recipe::new();
+        recipe.insert(
+            "out/font.ttf".to_string(),
+            ConfigOperation(vec![
+                source_step("font.glyphs"),
+                op_step(OpStep::Fontc, vec![]),
+                op_step(OpStep::BuildStat, vec![]),
+            ]),
+        );
+
+        let graph = recipe.to_graph(false, None).unwrap();
+
+        assert!(is_acyclic(&graph));
+        assert_eq!(graph.target_nodes.len(), 1);
+        assert!(graph.target_nodes.contains_key("out/font.ttf"));
+    }
+
+    #[test]
+    fn test_shared_external_dependency_is_acyclic_and_not_a_target() {
+        // Two targets needing the same on-disk file (the AddSubset donor case)
+        // must share one source node and must not register that file as a target.
+        let donor = tempfile::NamedTempFile::new().unwrap();
+        let donor_path = donor.path().to_string_lossy().to_string();
+
+        let mut recipe = Recipe::new();
+        for (target, source) in [("out/a.ttf", "a.glyphs"), ("out/b.ttf", "b.glyphs")] {
+            recipe.insert(
+                target.to_string(),
+                ConfigOperation(vec![
+                    source_step(source),
+                    op_step(OpStep::Fontc, vec![]),
+                    op_step(OpStep::Fix, vec![donor_path.clone()]),
+                ]),
+            );
+        }
+
+        let graph = recipe.to_graph(false, None).unwrap();
+
+        assert!(is_acyclic(&graph));
+        assert!(!graph.target_nodes.contains_key(&donor_path));
+        assert_eq!(graph.target_nodes.len(), 2);
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_radio_canada_italic_webfont_flows_through_buildstat() {
+        // The italic variable font is fused by the Roman font's BuildStat; the
+        // italic webfont is derived from the VF target, so it must read the
+        // STAT-merged artifact (i.e. pass through the BuildStat node).
+        let config_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/radio-canada/config.yaml");
+        let config_str = config_path.to_string_lossy().to_string();
+
+        let config = crate::load_config(&config_str).expect("config should load");
+        let _guard = crate::ChangeDirGuard::new().expect("should be able to guard the cwd");
+        crate::change_to_config_dir(&config_str).expect("should change to the config directory");
+
+        let recipe = config.recipe().expect("recipe should generate");
+        let graph = recipe.to_graph(false, None).expect("graph should build");
+
+        assert!(is_acyclic(&graph), "the build graph must be a DAG");
+
+        let italic_webfont = graph
+            .target_nodes
+            .keys()
+            .find(|name| name.ends_with("RadioCanadaDisplay-Italic[wght].woff2"))
+            .expect("the italic VF webfont target should exist");
+        assert!(
+            has_ancestor(&graph, graph.target_nodes[italic_webfont], "BuildStat"),
+            "the italic VF webfont should flow through BuildStat"
+        );
+
+        let roman_webfont = graph
+            .target_nodes
+            .keys()
+            .find(|name| name.ends_with("RadioCanadaDisplay[wght].woff2"))
+            .expect("the roman VF webfont target should exist");
+        assert!(
+            has_ancestor(&graph, graph.target_nodes[roman_webfont], "BuildStat"),
+            "the roman VF webfont should flow through BuildStat"
+        );
     }
 }
