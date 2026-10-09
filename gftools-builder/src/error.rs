@@ -28,6 +28,8 @@ pub enum ApplicationError {
     IncludeSubsetsError(String),
     #[error("Error removing overlaps: {0}")]
     RemoveOverlapsError(String),
+    #[error("No targets were found")]
+    NoTargets,
 }
 
 impl From<Box<dyn Error>> for ApplicationError {

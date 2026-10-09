@@ -69,6 +69,10 @@ impl BuildGraph {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.sinks.is_empty()
+    }
+
     fn sanitize_debug_component(component: &str) -> String {
         component
             .chars()

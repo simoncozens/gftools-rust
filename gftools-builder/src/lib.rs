@@ -165,6 +165,10 @@ pub async fn build(config: BuildConfig) -> Result<(), ApplicationError> {
 
     // Use the config to create a build graph
     let graph = recipe.to_graph(config.debug_intermediates, config.target.as_ref())?;
+
+    if graph.is_empty() {
+        return Err(ApplicationError::NoTargets);
+    }
     graph.ensure_directories()?;
 
     // Run the build
