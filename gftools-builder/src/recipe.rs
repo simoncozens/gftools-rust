@@ -66,7 +66,7 @@ fn parse_provider_options(
 pub(crate) enum Step {
     OperationStep {
         operation: OpStep,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
         args: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         input_file: Option<String>,
