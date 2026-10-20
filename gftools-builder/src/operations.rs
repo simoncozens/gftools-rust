@@ -9,7 +9,7 @@ use babelfont::{DesignLocation, UserLocation};
 use gftools::StatConfig;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Value, json};
 
 pub mod addsubset;
 pub mod autohint;
@@ -18,6 +18,7 @@ pub mod compress;
 pub mod convert;
 pub mod fix;
 pub mod fontc;
+pub mod fontsetter;
 pub mod glyphs2ufo;
 pub mod instantiate_source;
 pub mod removeoverlaps;
@@ -48,6 +49,8 @@ pub(crate) enum OpStep {
     InstantiateSource,
     #[serde(rename = "removeOverlaps")]
     RemoveOverlaps,
+    #[serde(rename = "fontsetter")]
+    Fontsetter,
 }
 
 impl OpStep {
@@ -64,6 +67,7 @@ impl OpStep {
             OpStep::Autohint => Box::new(autohint::Autohint::new()),
             OpStep::InstantiateSource => Box::new(instantiate_source::InstantiateSource::new()),
             OpStep::RemoveOverlaps => Box::new(removeoverlaps::RemoveOverlaps),
+            OpStep::Fontsetter => Box::new(fontsetter::FontSetter::default()),
         }
     }
 }
@@ -219,6 +223,18 @@ impl ConfigOperationBuilder {
         self.steps.push(Step::OperationStep {
             operation: OpStep::RemoveOverlaps,
             extra: HashMap::new(),
+            args: None,
+            input_file: None,
+            needs: vec![],
+        });
+        self
+    }
+
+    pub fn font_setter(mut self, values: Vec<(String, Value)>) -> Self {
+        let extra = Self::to_extra(&json!({ "values": values }));
+        self.steps.push(Step::OperationStep {
+            operation: OpStep::Fontsetter,
+            extra,
             args: None,
             input_file: None,
             needs: vec![],

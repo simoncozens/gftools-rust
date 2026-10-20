@@ -1,6 +1,7 @@
 mod closure;
 mod error;
 mod fix;
+mod fontsetter;
 pub mod license;
 mod names;
 mod overlaps;
@@ -17,6 +18,7 @@ use std::path::Path;
 use unicode_script::UnicodeScript as _;
 
 pub use error::GftoolsError;
+pub use fontsetter::{set_font_value, set_font_values};
 pub use names::{AxisLimits, AxisTriple, update_name_table};
 pub use stat::{
     AxisLocation, AxisRecord, AxisValue, StatBuilder, StatConfig, VarFont, gen_stat_tables,

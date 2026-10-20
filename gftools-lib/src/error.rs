@@ -28,4 +28,6 @@ pub enum GftoolsError {
     Git(String),
     #[error("Error communicating with GitHub: {0}")]
     GitHub(String),
+    #[error("problem setting font value: {0}")]
+    Fontsetter(String),
 }
