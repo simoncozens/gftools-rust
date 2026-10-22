@@ -4,7 +4,7 @@ use babelfont::{Font, Instance, UserLocation};
 
 use crate::{
     error::ApplicationError,
-    operations::{ConfigOperationBuilder, OpStep, fix::FixConfig},
+    operations::{ConfigOperationBuilder, OpStep},
     recipe::{Provider, Recipe, Step},
     recipe_providers::{
         googlefonts::{GoogleFontsOptions, instance_user_location},
@@ -119,12 +119,11 @@ impl NotoProvider {
             .to_string_lossy()
             .to_string();
 
-        // Unhinted variable: compile + fix
+        // Unhinted variable: compile (no fix)
         let unhinted_target =
             Self::variable_target(&familyname_path, "unhinted", &sourcebase, &axis_tags);
         let mut builder = ConfigOperationBuilder::new().source(source_path.clone());
         builder = builder.compile(&self.options.fontc_config);
-        builder = builder.fix(&FixConfig::default());
         let unhinted_steps = builder.build();
         recipe.insert(unhinted_target.clone(), unhinted_steps.clone());
         add_slim(
