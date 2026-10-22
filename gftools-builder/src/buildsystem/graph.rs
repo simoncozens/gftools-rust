@@ -338,18 +338,29 @@ impl BuildGraph {
 
         // When adding a sink edge, force the output to be the named target file
         // and broadcast that same OperationOutput to all existing outgoing edges.
+        // If another target's sink already hangs off this node (identical
+        // pipelines), keep that sink's name as the node's output so it is not
+        // clobbered; the orchestrator copies the result to the extra sinks.
+        let existing_sink_output = self
+            .graph
+            .edges_directed(current_node, petgraph::Direction::Outgoing)
+            .filter(|e| self.sinks.contains(&e.target()))
+            .map(|e| e.weight().output.clone())
+            .next();
         let final_output: OperationOutput = RawOperationOutput::from(sink_filename).into();
+        let broadcast = existing_sink_output.unwrap_or_else(|| final_output.clone());
 
         // If there are existing outgoing edges, update them to use the named output
         // so downstream consumers see the real target filename (not a temp file).
         let outgoing: Vec<_> = self
             .graph
             .edges_directed(current_node, petgraph::Direction::Outgoing)
+            .filter(|e| !self.sinks.contains(&e.target()))
             .map(|e| (e.target(), e.weight().from_slot, e.weight().to_slot))
             .collect();
         for (target, from_slot, to_slot) in outgoing {
             let edge = BuildEdge {
-                output: final_output.clone(),
+                output: broadcast.clone(),
                 from_slot,
                 to_slot,
             };

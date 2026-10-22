@@ -227,12 +227,36 @@ async fn spawn_build(context: Arc<Context>, index: NodeIndex) -> Result<(), Appl
             let max_slot = out_edges.iter().map(|e| e.weight().from_slot).max().unwrap_or(0);
             let mut output_files = vec![None; max_slot + 1];
             // Fill in the output slots - if multiple edges use the same slot, they share the same OperationOutput
-            for edge in out_edges {
+            // Prefer the output shared with downstream consumers, so the choice
+            // doesn't depend on edge iteration order; sink-only slots fall back to a sink.
+            let is_sink = |e: &EdgeReference<BuildEdge>| {
+                context
+                    .configuration
+                    .graph()
+                    .node_weight(e.target())
+                    .is_some_and(|n| n.shortname() == "Sink")
+            };
+            for edge in out_edges.iter().filter(|e| !is_sink(e)) {
                 let slot = edge.weight().from_slot;
                 if output_files[slot].is_none() {
                     output_files[slot] = Some(edge.weight().output.clone());
                 }
             }
+            for edge in out_edges.iter().filter(|e| is_sink(e)) {
+                let slot = edge.weight().from_slot;
+                if output_files[slot].is_none() {
+                    output_files[slot] = Some(edge.weight().output.clone());
+                }
+            }
+            // Extra sinks (identical pipelines for different targets) get copies.
+            let extra_sinks: Vec<(OperationOutput, OperationOutput)> = out_edges
+                .iter()
+                .filter(|e| is_sink(e))
+                .filter_map(|e| {
+                    let primary = output_files[e.weight().from_slot].as_ref()?;
+                    Some((primary.clone(), e.weight().output.clone()))
+                })
+                .collect();
 
             // Convert to non-Option vec (all slots should be filled)
             let output_files: Vec<OperationOutput> = output_files.into_iter().flatten().collect();
@@ -244,6 +268,16 @@ async fn spawn_build(context: Arc<Context>, index: NodeIndex) -> Result<(), Appl
 
             // OK, we are ready.
             run_op(&context, build, &input_files, &output_files, &targets).await?;
+
+            for (primary, extra) in extra_sinks {
+                let (from, to) = (primary.to_filename(None)?, extra.to_filename(None)?);
+                if from != to {
+                    if let Some(parent) = std::path::Path::new(&to).parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    std::fs::copy(&from, &to)?;
+                }
+            }
 
             if matches!(context.progress_mode, ProgressMode::PerTarget) {
                 let op_desc = build.shortname().to_string();
