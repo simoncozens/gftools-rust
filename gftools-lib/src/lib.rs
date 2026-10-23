@@ -13,9 +13,11 @@ use google_fonts_languages::LANGUAGES;
 pub use overlaps::remove_overlaps;
 use skrifa::raw::TableProvider;
 use skrifa::string::StringId;
-use skrifa::{FontRef, MetadataProvider};
+use skrifa::{FontRef, MetadataProvider, Tag};
+use std::collections::HashSet;
 use std::path::Path;
 use unicode_script::UnicodeScript as _;
+use write_fonts::FontBuilder;
 
 pub use error::GftoolsError;
 pub use fontsetter::{set_font_value, set_font_values};
@@ -25,8 +27,8 @@ pub use stat::{
     gen_stat_tables_from_config,
 };
 pub use utils::{
-    PROD_FAMILY_DOWNLOAD, download_family_from_google_fonts, font_is_italic, is_google_fonts_repo,
-    strip_json_guard,
+    PROD_FAMILY_DOWNLOAD, download_family_from_google_fonts, font_familyname, font_is_italic,
+    is_google_fonts_repo, strip_json_guard,
 };
 // Have to make these pub so our scripts can use them
 pub use gf_metadata::{AxisProto, DesignerInfoProto, FamilyProto};
@@ -115,6 +117,29 @@ pub fn primary_script(fontref: &FontRef, ignore_latin: bool) -> Option<String> {
         return None;
     }
     script_counts.first().map(|(script, _)| script.clone())
+}
+
+/// Removes the specified tables from the given font.
+///
+/// # Arguments
+///
+/// * `in_font` - A vector of bytes representing the input font.
+/// * `to_remove` - A set of table tags to remove from the font.
+///
+/// # Returns
+///
+/// A `Result` containing the modified font as a vector of bytes, or a `GftoolsError` if an error occurs.
+pub fn remove_tables(in_font: Vec<u8>, to_remove: HashSet<Tag>) -> Result<Vec<u8>, GftoolsError> {
+    let mut out_font = FontBuilder::new();
+    let fontref = skrifa::FontRef::new(&in_font)?;
+    for table in fontref.table_directory().table_records() {
+        if !to_remove.contains(&table.tag())
+            && let Some(data) = fontref.table_data(table.tag())
+        {
+            out_font.add_raw(table.tag(), data);
+        }
+    }
+    Ok(out_font.build())
 }
 
 #[cfg(test)]

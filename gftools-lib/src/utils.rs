@@ -112,6 +112,33 @@ pub fn font_is_italic(font: &skrifa::FontRef) -> bool {
         .unwrap_or(false)
 }
 
+/// Look up a name record for Windows, Unicode BMP, US English (3, 1, 0x409).
+fn win_us_english_name(font: &skrifa::FontRef, id: StringId) -> Option<String> {
+    let name_table = font.name().ok()?;
+    let string_data = name_table.string_data();
+    name_table
+        .name_record()
+        .iter()
+        .find(|record| {
+            record.name_id() == id
+                && record.platform_id() == 3
+                && record.encoding_id() == 1
+                && record.language_id() == 0x409
+        })
+        .and_then(|record| record.string(string_data).ok())
+        .map(|name| name.to_string())
+}
+
+/// Get a font's family name from the name table.
+///
+/// Since our fonts use the RIBBI naming model, this is the Typographic Family
+/// Name (name ID 16) if it exists, otherwise the Family Name (name ID 1).
+/// Only the Windows US English record is considered.
+pub fn font_familyname(font: &skrifa::FontRef) -> Option<String> {
+    win_us_english_name(font, StringId::TYPOGRAPHIC_FAMILY_NAME)
+        .or_else(|| win_us_english_name(font, StringId::FAMILY_NAME))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -14,8 +14,8 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-babelfont = { version = "0.2.2" }
-fontspector-hotfix = { version = "0.5.0", git = "https://github.com/fonttools/fontspector", default-features = false, features = [
+babelfont = { version = "0.2.3" }
+fontspector-hotfix = { version = "0.6.0", git = "https://github.com/fonttools/fontspector", default-features = false, features = [
     "profiles",
 ] }
 anyhow = "1.0.104"
@@ -30,7 +30,7 @@ env_logger = "0.11.8"
 expanduser = "1.2.2"
 fontc = "1.0.0"
 fontdrasil = "1.0.0"
-fontmerge = { version = "0.2.0" }
+fontmerge = { version = "0.2.1" }
 futures = "0.3"
 gf-metadata = "0.2.0"
 google-fonts-axisregistry = "0.5.0"

@@ -91,6 +91,14 @@ name = "gftools-rangify"
 path = "src/rangify.rs"
 
 [[bin]]
+name = "gftools-fix-unwanted-tables"
+path = "src/fix_unwanted_tables.rs"
+
+[[bin]]
+name = "gftools-rename-font"
+path = "src/rename_font.rs"
+
+[[bin]]
 name = "gftools-rename-glyphs"
 path = "src/rename_glyphs.rs"
 
@@ -142,6 +150,7 @@ tabled = { workspace = true }
 unicode_names2 = { workspace = true }
 google-fonts-subsets = { workspace = true }
 gftools = { workspace = true }
+google-fonts-axisregistry = { workspace = true }
 anyhow = { workspace = true }
 norad = { workspace = true }
 glob = "0.3.4"
