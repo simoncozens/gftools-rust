@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 pub mod addsubset;
+pub mod applyhinting;
 pub mod autohint;
 pub mod buildstat;
 pub mod compress;
@@ -45,6 +46,8 @@ pub(crate) enum OpStep {
     Subspace,
     #[serde(rename = "autohint")]
     Autohint,
+    #[serde(rename = "applyHinting")]
+    ApplyHinting,
     #[serde(rename = "instantiateSource")]
     InstantiateSource,
     #[serde(rename = "removeOverlaps")]
@@ -65,6 +68,7 @@ impl OpStep {
             OpStep::AddSubset => Box::new(addsubset::AddSubset::new()),
             OpStep::Subspace => Box::new(subspace::Subspace::new()),
             OpStep::Autohint => Box::new(autohint::Autohint::new()),
+            OpStep::ApplyHinting => Box::new(applyhinting::ApplyHinting::new()),
             OpStep::InstantiateSource => Box::new(instantiate_source::InstantiateSource::new()),
             OpStep::RemoveOverlaps => Box::new(removeoverlaps::RemoveOverlaps),
             OpStep::Fontsetter => Box::new(fontsetter::FontSetter::default()),
@@ -197,6 +201,17 @@ impl ConfigOperationBuilder {
             operation: OpStep::Autohint,
             extra: HashMap::new(),
             args,
+            input_file: None,
+            needs: vec![],
+        });
+        self
+    }
+
+    pub fn apply_hinting(mut self, hinting_file: &str) -> Self {
+        self.steps.push(Step::OperationStep {
+            operation: OpStep::ApplyHinting,
+            extra: HashMap::new(),
+            args: Some(hinting_file.to_string()),
             input_file: None,
             needs: vec![],
         });

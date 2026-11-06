@@ -2,6 +2,7 @@ mod closure;
 mod error;
 mod fix;
 mod fontsetter;
+mod hinting;
 pub mod license;
 mod names;
 mod overlaps;
@@ -21,6 +22,7 @@ use write_fonts::FontBuilder;
 
 pub use error::GftoolsError;
 pub use fontsetter::{set_font_value, set_font_values};
+pub use hinting::{HintingFile, apply_hinting, assemble};
 pub use names::{AxisLimits, AxisTriple, update_name_table};
 pub use stat::{
     AxisLocation, AxisRecord, AxisValue, StatBuilder, StatConfig, VarFont, gen_stat_tables,
