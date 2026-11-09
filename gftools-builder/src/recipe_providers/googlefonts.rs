@@ -73,6 +73,10 @@ pub struct GoogleFontsOptions {
     #[serde(default)]
     pub filename_suffix: Option<String>,
 
+    /// A static TTF's own TrueType hinting: output file name -> hinting file
+    #[serde(default, rename = "hintingFiles")]
+    pub hinting_files: HashMap<String, String>,
+
     // Options about what we build
     #[serde_inline_default(true)]
     #[serde(rename = "buildVariable")]
@@ -202,6 +206,12 @@ impl GoogleFontsOptions {
     }
 
     #[allow(dead_code)]
+    /// The hinting file of a static target, if the config names one
+    pub fn hinting_file(&self, target: &str) -> Option<&str> {
+        let name = std::path::Path::new(target).file_name()?.to_str()?;
+        self.hinting_files.get(name).map(String::as_str)
+    }
+
     pub fn static_filename(
         &self,
         instancebase: &str,
@@ -430,10 +440,15 @@ impl GoogleFontsProvider {
             let user_loc = instance_user_location(source, instance)?;
             builder = builder.instance(&user_loc);
         }
-        // Remove overlap
-        builder = builder.remove_overlaps();
-        // Autohint steps
-        builder = builder.autohint(None);
+        if let Some(hinting) = self.options.hinting_file(&target) {
+            // the font carries its own hinting, which needs its points
+            builder = builder.apply_hinting(hinting);
+        } else {
+            // Remove overlap
+            builder = builder.remove_overlaps();
+            // Autohint steps
+            builder = builder.autohint(None);
+        }
         // VTT steps
         builder = builder.fix(&self.options.fix_config);
 
@@ -562,6 +577,9 @@ impl GoogleFontsProvider {
         }
         builder = builder.compile(&self.options.fontc_config);
         // Any post-compile steps
+        if let Some(hinting) = self.options.hinting_file(&target) {
+            builder = builder.apply_hinting(hinting);
+        }
         // Any VTT steps
         // If italic, subspace the axes according to style
 
