@@ -54,7 +54,7 @@ fn main() -> Result<()> {
             None => {
                 let mut font = Testable::new(path)
                     .map_err(|e| anyhow!("Failed to load font `{}`: {e}", path.display()))?;
-                apply_hotfixes(&mut font, &["unwanted_tables".to_string()], false)
+                apply_hotfixes(&mut font, &["unwanted_tables".to_string()])
                     .map_err(|_| anyhow!("Failed to apply hotfixes to `{}`", path.display()))?;
                 font.contents
             }
@@ -91,7 +91,7 @@ mod tests {
         std::fs::write(&path, builder.build()).unwrap();
 
         let mut font = Testable::new(&path).unwrap();
-        apply_hotfixes(&mut font, &["unwanted_tables".to_string()], false).unwrap();
+        apply_hotfixes(&mut font, &["unwanted_tables".to_string()]).unwrap();
         let out = FontRef::new(&font.contents).unwrap();
         assert!(out.table_data(Tag::new(b"Debg")).is_none());
         assert!(out.table_data(Tag::new(b"glyf")).is_some());

@@ -1,4 +1,4 @@
-use fontspector_hotfix::{Testable, apply_hotfixes};
+use fontspector_hotfix::Testable;
 
 use crate::GftoolsError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -22,6 +22,7 @@ pub enum FixFvarTable {
     No,
 }
 
+#[allow(unused_variables)]
 pub fn fix_font(
     font_path: &str,
     output_path: &str,
@@ -70,12 +71,18 @@ pub fn fix_font(
         check_ids.push("googlefonts/fvar_instances");
     }
     let check_ids: Vec<String> = check_ids.into_iter().map(String::from).collect();
-    apply_hotfixes(
-        &mut font,
-        &check_ids,
-        matches!(interactive, Interactive::Yes),
-    )
-    .map_err(|_| GftoolsError::Misc("Failed to apply hotfixes".to_string()))?;
+
+    #[cfg(feature = "cli")]
+    if matches!(interactive, Interactive::Yes) {
+        fontspector_hotfix::apply_hotfixes_interactive(&mut font, &check_ids)
+            .map_err(|_| GftoolsError::Misc("Failed to apply hotfixes".to_string()))?;
+    } else {
+        fontspector_hotfix::apply_hotfixes(&mut font, &check_ids)
+            .map_err(|_| GftoolsError::Misc("Failed to apply hotfixes".to_string()))?;
+    }
+    #[cfg(not(feature = "cli"))]
+    fontspector_hotfix::apply_hotfixes(&mut font, &check_ids)
+        .map_err(|_| GftoolsError::Misc("Failed to apply hotfixes".to_string()))?;
     // Save the fixed font
     std::fs::write(output_path, &font.contents)?;
     Ok(())

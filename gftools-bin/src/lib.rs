@@ -1,6 +1,7 @@
-use std::fmt::Display;
+use anyhow::Result;
+use std::{fmt::Display, path::Path};
 
-use fontspector_hotfix::{Testable, apply_hotfixes};
+use fontspector_hotfix::Testable;
 use gftools::GftoolsError;
 use tabled::settings::Style;
 
@@ -20,11 +21,27 @@ pub fn fix_runner(
     )
     .init();
     let mut font = Testable::new(font_path)?;
-    apply_hotfixes(&mut font, check_ids, interactive)
-        .map_err(|_| GftoolsError::Misc("Failed to apply hotfixes".to_string()))?;
+    if interactive {
+        fontspector_hotfix::apply_hotfixes_interactive(&mut font, check_ids)
+            .map_err(|_| GftoolsError::Misc("Failed to apply hotfixes".to_string()))?;
+    } else {
+        fontspector_hotfix::apply_hotfixes(&mut font, check_ids)
+            .map_err(|_| GftoolsError::Misc("Failed to apply hotfixes".to_string()))?;
+    }
     // Save the fixed font
     std::fs::write(output_path, &font.contents)?;
     Ok(())
+}
+
+pub fn open_font(font_path: &Path) -> skrifa::Font {
+    let backing = std::fs::read(font_path).unwrap_or_else(|e| {
+        eprintln!("{}: {e:?}", font_path.display());
+        std::process::exit(1);
+    });
+    skrifa::Font::new(backing, 0).unwrap_or_else(|| {
+        eprintln!("{}: Failed to open font", font_path.display());
+        std::process::exit(1);
+    })
 }
 
 pub fn list_some_things<T: Display>(

@@ -1,3 +1,5 @@
+mod constants;
+pub use constants::KNOWN_WEIGHTS;
 mod closure;
 mod error;
 mod fix;

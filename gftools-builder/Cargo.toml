@@ -54,7 +54,7 @@ ascii-dag = { workspace = true }
 tracing-chrome = { workspace = true }
 clap-verbosity-flag = { workspace = true }
 
-gftools = { workspace = true }
+gftools = { workspace = true, features = ["cli"] }
 babelfont = { workspace = true }
 fontmerge = { workspace = true }
 dirs = { workspace = true }                                     # For temporary storage of donor fonts when including subsets

@@ -139,12 +139,20 @@ path = "src/what_subsets.rs"
 name = "gftools-drop-hints"
 path = "src/drop_hints.rs"
 
+[[bin]]
+name = "gftools-check-vtt-compatibility"
+path = "src/check_vtt_compatibility.rs"
+
+[[bin]]
+name = "gftools-ufo-fix-instances"
+path = "src/ufo_fix_instances.rs"
+
 [dependencies]
 skrifa = { workspace = true }
 log = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 write-fonts = { workspace = true, features = ["tables"] }
-fontspector-hotfix = { workspace = true }
+fontspector-hotfix = { workspace = true, features = ["cli"] }
 env_logger = { workspace = true }
 tabled = { workspace = true }
 unicode_names2 = { workspace = true }
@@ -158,6 +166,9 @@ csv = "1.4.0"
 serde.workspace = true
 serde_yaml_ng = { workspace = true }
 tilvisan.workspace = true
+babelfont.workspace = true
+fontdrasil.workspace = true
+uuid = "1.29.2"
 
 [dev-dependencies]
 tempfile = { workspace = true }
