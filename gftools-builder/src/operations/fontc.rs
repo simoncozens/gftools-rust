@@ -31,6 +31,9 @@ pub struct FontcConfig {
 
     #[serde(default = "default_to_true")]
     pub production_names: bool,
+
+    #[serde(default)]
+    pub glyph_data: Option<String>,
 }
 
 fn default_to_true() -> bool {
@@ -44,6 +47,7 @@ impl Default for FontcConfig {
             decompose_transformed_components: true,
             reverse_outline_direction: true,
             production_names: true,
+            glyph_data: None,
         }
     }
 }
@@ -109,7 +113,15 @@ impl Operation for Fontc {
 
         let input = fontc::Input::new(&PathBuf::from(input_font))
             .map_err(|e| ApplicationError::Other(e.to_string()))?
-            .create_source()
+            .create_source(&fontc::SourceOptions {
+                instance: None,
+                glyph_data: self
+                    .config
+                    .glyph_data
+                    .as_ref()
+                    .map(|s| vec![PathBuf::from(s)])
+                    .unwrap_or_default(),
+            })
             .map_err(|e| ApplicationError::Other(e.to_string()))?;
         let font = generate_font(input, self.fontc_options())
             .map_err(|e| ApplicationError::Other(e.to_string()))?;
