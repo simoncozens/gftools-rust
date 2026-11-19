@@ -33,7 +33,7 @@ pub struct FontcConfig {
     pub production_names: bool,
 
     #[serde(default)]
-    pub glyph_data: Option<String>,
+    pub glyph_data: Option<Vec<String>>,
 }
 
 fn default_to_true() -> bool {
@@ -119,7 +119,7 @@ impl Operation for Fontc {
                     .config
                     .glyph_data
                     .as_ref()
-                    .map(|s| vec![PathBuf::from(s)])
+                    .map(|s| s.iter().map(PathBuf::from).collect())
                     .unwrap_or_default(),
             })
             .map_err(|e| ApplicationError::Other(e.to_string()))?;
