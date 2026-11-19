@@ -20,8 +20,6 @@ pub enum GftoolsError {
     ProtobufParse(#[from] protobuf::text_format::ParseError),
     #[error("HTTP error: {0}")]
     HttpError(#[from] reqwest::Error),
-    #[error("Error opening git repository: {0}")]
-    GitOpen(#[from] gix::open::Error),
     #[error("Network error using git: {0}")]
     GitNetwork(String),
     #[error("general git error: {0}")]
