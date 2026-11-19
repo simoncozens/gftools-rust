@@ -168,6 +168,7 @@ impl Operation for AddSubset {
             DuplicateLookupHandling::Both,
             false, // Generally speaking we don't want avar merges
             true,  // We want dotted circle handling
+            None,  // No particular includes path
         )
         .map_err(|e| ApplicationError::Other(format!("Font merge failed: {}", e)))?;
         outputs[0].set_font_source(Box::new(output_font))?;
