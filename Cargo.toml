@@ -18,7 +18,7 @@ license = "MIT OR Apache-2.0"
 # Fontations
 fontc = "2.0.0"
 fontdrasil = "2.0.0"
-write-fonts = { version = "0.56.0", features = ["tables"] }
+write-fonts = { version = "0.55.0", features = ["tables"] }
 skrifa = "0.50.0"
 # read-fonts = "0.42.1" # Just use skrifa::raw
 
