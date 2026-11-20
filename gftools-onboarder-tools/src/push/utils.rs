@@ -54,7 +54,8 @@ fn get_googlefonts_remote(repo: &Repository) -> Result<String, GftoolsError> {
 /// a remote, not replace them, so a `gix` fetch would pull every branch of the
 /// remote rather than just `main`.
 pub fn branch_matches_googlefonts_main(path: &Path) -> Result<bool, GftoolsError> {
-    let repo = gix::open(path)?;
+    let repo =
+        gix::open(path).map_err(|e| GftoolsError::Git(format!("Failed to open repo: {e}")))?;
     let remote_name = get_googlefonts_remote(&repo)?;
 
     // `git fetch <remote> main` writes the fetched tip to `FETCH_HEAD`, and
@@ -174,7 +175,8 @@ pub struct CommitInfo {
 /// libgit2 does when a walk is left unsorted — and the order matters, because it
 /// decides which pair of commits gets diffed.
 pub fn repo_commits(path: &Path) -> Result<Vec<CommitInfo>, GftoolsError> {
-    let mut repo = gix::open(path)?;
+    let mut repo =
+        gix::open(path).map_err(|e| GftoolsError::Git(format!("Failed to open repo: {e}")))?;
     // Detached straight away: an attached id borrows the repository, which
     // would clash with setting the object cache below.
     let head = repo
